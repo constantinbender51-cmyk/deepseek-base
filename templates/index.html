@@ -47,7 +47,7 @@
         btn.disabled = true;
         btn.innerText = "Generating...";
         outputDiv.innerText = "";
-        outputDiv.classList.remove('error');
+        outputDiv.style.color = "black";
         resultContainer.style.display = 'block';
 
         try {
@@ -57,27 +57,34 @@
                 body: JSON.stringify({ prompt: prompt })
             });
 
-            const data = await response.json();
-
-            if (response.ok) {
-                // Determine if result is empty or valid
-                outputDiv.innerText = data.result || "(No output generated)";
-            } else {
-                // Handle backend errors (like missing API key)
-                outputDiv.innerText = "Error: " + (data.error || "Unknown server error");
-                outputDiv.classList.add('error');
+            // 1. Get raw text first to check if it's JSON or HTML
+            const text = await response.text();
+            
+            try {
+                // 2. Try to parse as JSON
+                const data = JSON.parse(text);
+                
+                if (response.ok) {
+                    outputDiv.innerText = data.result || "(No output generated)";
+                } else {
+                    outputDiv.innerText = "Error: " + (data.error || "Unknown server error");
+                    outputDiv.style.color = "red";
+                }
+            } catch (jsonError) {
+                // 3. If parsing fails, it's likely an HTML error page from Railway/Flask
+                console.error("Server returned non-JSON:", text);
+                outputDiv.innerText = "Server Error (See console for full details):\n" + text.substring(0, 500) + "...";
+                outputDiv.style.color = "red";
             }
+
         } catch (error) {
-            // Handle network errors
             outputDiv.innerText = "Network Error: " + error.message;
-            outputDiv.classList.add('error');
+            outputDiv.style.color = "red";
         } finally {
-            // Reset button state
             btn.disabled = false;
             btn.innerText = "Generate";
         }
     }
 </script>
-
 </body>
 </html>
