@@ -5,7 +5,7 @@ import os
 # --- Page Configuration ---
 st.set_page_config(page_title="My DeepSeek Deployment", page_icon="🚀")
 
-st.title("🚀 My Custom AI Deployment")
+st.title("Deepseek base")
 st.markdown("Using a personal Replicate deployment on Railway.")
 
 # --- Authentication ---
