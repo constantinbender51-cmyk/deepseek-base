@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek Base Generator</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background-color: #f4f4f9; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; }
+        textarea { width: 100%; height: 150px; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-size: 16px; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        #output { margin-top: 20px; white-space: pre-wrap; background: #eee; padding: 15px; border-radius: 4px; min-height: 50px; border: 1px solid #ddd; }
+        .label { font-weight: bold; margin-bottom: 5px; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>DeepSeek-67b (Base)</h1>
+    <p>Enter a prompt below. Since this is a "Base" model, it works best at completing sentences or code rather than chatting.</p>
+    
+    <label class="label" for="prompt">Prompt:</label>
+    <textarea id="prompt" placeholder="Once upon a time in a futuristic city..."></textarea>
+    
+    <button id="generateBtn" onclick="generateText()">Generate</button>
+    
+    <div id="resultContainer" style="display:none;">
+        <label class="label">Result:</label>
+        <div id="output"></div>
+    </div>
+</div>
+
+<script>
+    async function generateText() {
+        const prompt = document.getElementById('prompt').value;
+        const btn = document.getElementById('generateBtn');
+        const outputDiv = document.getElementById('output');
+        const resultContainer = document.getElementById('resultContainer');
+
+        if (!prompt) return alert("Please enter a prompt");
+
+        // UI Loading State
+        btn.disabled = true;
+        btn.innerText = "Generating...";
+        outputDiv.innerText = "";
+        resultContainer.style.display = 'block';
+
+        try {
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application
