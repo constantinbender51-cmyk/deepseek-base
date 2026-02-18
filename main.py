@@ -2,75 +2,62 @@ import streamlit as st
 import replicate
 import os
 
-# Page configuration
+# --- Page Configuration ---
 st.set_page_config(page_title="DeepSeek Base AI", page_icon="🤖")
 
-# Custom CSS to make it look cleaner
-st.markdown("""
-<style>
-    .stTextInput > div > div > input {
-        background-color: #f0f2f6;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🤖 DeepSeek Base Generator")
-st.markdown("Powered by Replicate & Railway")
+st.markdown("Powered by Replicate & Railway. This version uses a blocking API call.")
 
-# 1. Setup Authentication
-# We retrieve the key from the environment variable 'RKEY' as requested
-api_token = os.getenv("RKEY")
-
-if not api_token:
-    st.error("🚨 Error: RKEY environment variable not found. Please set it in Railway settings.")
+# --- Authentication ---
+# Retrieve the API key from the 'RKEY' environment variable.
+# The replicate library automatically looks for REPLICATE_API_TOKEN,
+# so we will set it here for the library to use.
+try:
+    api_token = os.environ["RKEY"]
+    os.environ["REPLICATE_API_TOKEN"] = api_token
+except KeyError:
+    st.error("🚨 RKEY environment variable not found! Please set it in your Railway project variables.")
     st.stop()
 
-# Configure the replicate client with the custom token
-client = replicate.Client(api_token=api_token)
-
-# 2. User Interface Inputs
+# --- User Interface ---
 with st.form("generation_form"):
-    prompt = st.text_area("Enter your prompt:", height=150, placeholder="Write a python script to...")
+    prompt = st.text_area(
+        "Enter your prompt:", 
+        height=150, 
+        placeholder="Write a python script to list all files in a directory."
+    )
     
-    # Optional parameters sidebar
     with st.expander("Advanced Settings"):
-        temperature = st.slider("Temperature (Creativity)", 0.1, 2.0, 0.7)
-        max_tokens = st.number_input("Max Tokens", 64, 4096, 512)
+        temperature = st.slider("Temperature (Creativity)", 0.1, 2.0, 0.75, 0.05)
+        max_tokens = st.number_input("Max New Tokens", min_value=64, max_value=4096, value=512)
 
     submit_button = st.form_submit_button("Generate Response")
 
-# 3. Logic to call the API
-if submit_button and prompt:
-    # Create a placeholder for the streaming output
-    response_placeholder = st.empty()
-    full_response = ""
+# --- API Call Logic ---
+if submit_button:
+    if not prompt:
+        st.warning("Please enter a prompt first.")
+    else:
+        # Show a spinner while the API call is in progress (blocking)
+        with st.spinner("🤖 Generating response... Please wait."):
+            try:
+                # This is the blocking call, similar to your example's behavior.
+                # The app will wait here until the entire output is generated.
+                output = replicate.run(
+                    "constantinbender51-cmyk/deepseek-base",
+                    input={
+                        "prompt": prompt,
+                        "max_new_tokens": max_tokens,
+                        "temperature": temperature
+                    }
+                )
 
-    try:
-        # Define the model input schema
-        input_data = {
-            "prompt": prompt,
-            "max_new_tokens": max_tokens,
-            "temperature": temperature
-        }
+                # 'output' is an iterator, so we join its parts to form the full response string.
+                full_response = "".join(list(output))
 
-        # Run the model
-        # Note: We use the owner/model format. If a specific version hash is needed, 
-        # Replicate usually handles the latest version automatically with this format.
-        output = client.stream(
-            "constantinbender51-cmyk/deepseek-base",
-            input=input_data
-        )
+                st.markdown("---")
+                st.subheader("Generated Response:")
+                st.markdown(full_response)
 
-        # Stream the results to the UI
-        for event in output:
-            full_response += str(event)
-            response_placeholder.markdown(full_response + "▌")
-        
-        # Final update without the cursor
-        response_placeholder.markdown(full_response)
-
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-
-elif submit_button and not prompt:
-    st.warning("Please enter a prompt first.")
+            except Exception as e:
+                st.error(f"An error occurred with the Replicate API: {e}")
