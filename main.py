@@ -4,11 +4,17 @@ from openai import OpenAI
 
 app = Flask(__name__)
 
-# Initialize the client pointing to OpenRouter instead of OpenAI
+# Initialize the client pointing to OpenRouter
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ.get("OPENROUTER_API_KEY"),
 )
+
+# Moved the default prompt out here to prevent Quote-Escaping crashes!
+DEFAULT_PROMPT = '''def fast_inverse_square_root(number):
+    """
+    Computes the fast inverse square root
+    """'''
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -31,7 +37,7 @@ HTML_TEMPLATE = """
     
     <form method="POST">
         <label for="prompt">Text to Complete:</label><br><br>
-        <textarea id="prompt" name="prompt" required autofocus>{{ prompt if prompt else 'def fast_inverse_square_root(number):\\n    """\\n    Computes the fast inverse square root\\n    """' }}</textarea><br>
+        <textarea id="prompt" name="prompt" required autofocus>{{ prompt if prompt else default_prompt }}</textarea><br>
         <button type="submit">Run Engine</button>
     </form>
 
@@ -56,22 +62,19 @@ def index():
         prompt = request.form.get("prompt", "")
         if prompt:
             try:
-                # 1. Use the standard completions endpoint for the base model
+                # Use standard completions for the base engine
                 response = client.completions.create(
-                    # This targets the DeepSeek Coder Base model (excellent logic/pattern engine)
-                    # You can also try: "deepseek/deepseek-llm-67b-base" if available
                     model="deepseek/deepseek-coder", 
                     prompt=prompt,
                     max_tokens=300,
                     temperature=0.6,
-                    # OpenRouter highly recommends passing these headers for analytics/ranking, but they are optional
                     extra_headers={
-                        "HTTP-Referer": "https://your-app-url.com", # Optional
-                        "X-Title": "My Base Model App",             # Optional
+                        "HTTP-Referer": "https://your-app-url.com", # Optional for OpenRouter
+                        "X-Title": "My Base Model App",             # Optional for OpenRouter
                     }
                 )
                 
-                # 2. Append the raw completion to your prompt
+                # Append the raw completion seamlessly to your prompt
                 response_text = prompt + response.choices[0].text
                 
             except Exception as e:
@@ -80,6 +83,7 @@ def index():
     return render_template_string(
         HTML_TEMPLATE, 
         prompt=prompt, 
+        default_prompt=DEFAULT_PROMPT, # Pass the safe string in here
         response=response_text, 
         error=error_text
     )
