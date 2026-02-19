@@ -3,190 +3,275 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSeek Base Generator</title>
-    
-    <!-- Markdown and Syntax Highlighting Support -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-
+    <title>DeepSeek AI Text Generator</title>
     <style>
-        :root { --bg: #1e1e2e; --surface: #313244; --text: #cdd6f4; --accent: #89b4fa; --border: #45475a; }
-        body { font-family: -apple-system, system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 2rem; }
-        
-        .container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
-        
-        /* Sidebar Styles */
-        .sidebar { background: var(--surface); padding: 20px; border-radius: 8px; border: 1px solid var(--border); height: fit-content; }
-        .control-group { margin-bottom: 1.5rem; }
-        label { display: block; font-size: 0.85rem; font-weight: bold; margin-bottom: 0.5rem; color: #a6adc8; }
-        select, input[type="range"] { width: 100%; padding: 8px; background: #181825; border: 1px solid var(--border); color: white; border-radius: 4px; box-sizing: border-box; }
-        .val-display { float: right; font-family: monospace; color: var(--accent); }
-        
-        /* Editor Styles */
-        .editor-col { display: flex; flex-direction: column; gap: 1rem; }
-        textarea { 
-            width: 100%; height: 160px; padding: 15px; 
-            background: #181825; border: 1px solid var(--border); 
-            color: var(--text); border-radius: 8px; 
-            font-family: 'Courier New', monospace; font-size: 1rem;
-            resize: vertical; box-sizing: border-box;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 
-        .btn-row { display: flex; gap: 10px; }
-        button { 
-            flex: 1; padding: 12px; border: none; border-radius: 6px; 
-            font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 1rem; 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
         }
-        #genBtn { background-color: var(--accent); color: #1e1e2e; }
-        #genBtn:hover { opacity: 0.9; }
-        #stopBtn { background-color: #f38ba8; color: #1e1e2e; display: none; }
 
-        /* Output Styles */
-        #output { 
-            background: #11111b; padding: 20px; border-radius: 8px; 
-            border: 1px solid var(--border); min-height: 150px; 
-            overflow-x: auto; line-height: 1.6;
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 800px;
+            overflow: hidden;
         }
-        /* Markdown Overrides */
-        #output pre { background: #181825; padding: 1rem; border-radius: 6px; }
-        #output code { font-family: 'Courier New', monospace; font-size: 0.9em; }
-        #output p { margin-top: 0; }
-        
-        h1 { margin-top: 0; color: var(--accent); }
-        .badge { font-size: 0.5em; vertical-align: middle; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; color: #a6adc8; }
-        
-        @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            border-top: 2px solid #f0f0f0;
+            padding-top: 30px;
+        }
+
+        .result-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .result-box {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 100px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #dc3545;
+            font-size: 0.9em;
+            margin-top: 5px;
+            display: none;
+        }
+
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            button {
+                padding: 12px 20px;
+            }
+        }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <div class="sidebar">
-        <h1>DeepSeek <span class="badge">BASE</span></h1>
-        <p style="font-size: 0.8rem; color: #a6adc8;">This is a base model. It completes patterns rather than answering questions.</p>
-        
-        <div class="control-group">
-            <label>Presets</label>
-            <select id="preset" onchange="applyPreset()">
-                <option value="custom">Custom Prompt</option>
-                <option value="python">Python Code</option>
-                <option value="sql">SQL Query</option>
-                <option value="story">Creative Story</option>
-            </select>
+    <div class="container">
+        <div class="header">
+            <h1>DeepSeek AI</h1>
+            <p>Generate text using DeepSeek-67B AI model</p>
         </div>
 
-        <div class="control-group">
-            <label>Temperature <span id="tempVal" class="val-display">0.7</span></label>
-            <input type="range" id="temperature" min="0.1" max="2.0" step="0.1" value="0.7" oninput="updateVal('temperature', 'tempVal')">
+        <div class="content">
+            <div class="input-section">
+                <form id="predictionForm" action="/predict" method="POST">
+                    <div class="form-group">
+                        <label for="prompt">Enter your prompt:</label>
+                        <textarea 
+                            id="prompt" 
+                            name="prompt" 
+                            rows="5" 
+                            placeholder="Type your prompt here... (e.g., 'Write a story about a robot learning to paint')"
+                            required
+                        ></textarea>
+                    </div>
+
+                    <button type="submit" id="submitBtn">
+                        Generate Text
+                    </button>
+                </form>
+
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Generating your text... This may take a moment.</p>
+                </div>
+            </div>
+
+            <div class="result-section">
+                <h2>Generated Text:</h2>
+                <div class="result-box" id="resultBox">
+                    {% if prediction_text %}
+                        {{ prediction_text }}
+                    {% else %}
+                        Your generated text will appear here...
+                    {% endif %}
+                </div>
+            </div>
         </div>
 
-        <div class="control-group">
-            <label>Max Tokens <span id="tokenVal" class="val-display">512</span></label>
-            <input type="range" id="maxTokens" min="64" max="2048" step="64" value="512" oninput="updateVal('maxTokens', 'tokenVal')">
+        <div class="footer">
+            <p>Powered by <a href="https://replicate.com/deepseek-ai/deepseek-67b-base" target="_blank">DeepSeek-67B on Replicate</a></p>
         </div>
     </div>
 
-    <div class="editor-col">
-        <textarea id="prompt" placeholder="Type a sentence or code snippet to complete..."></textarea>
-        
-        <div class="btn-row">
-            <button id="genBtn" onclick="generate()">Generate</button>
-            <button id="stopBtn" onclick="stopGen()">Stop</button>
-        </div>
-
-        <div id="output"></div>
-    </div>
-</div>
-
-<script>
-    let abortController = null;
-    const outputDiv = document.getElementById('output');
-    
-    // Base models need specific prompts to work well
-    const presets = {
-        'python': { text: 'def binary_search(arr, target):\n    """\n    Iterative binary search implementation\n    """', temp: 0.2 },
-        'sql': { text: '-- Table: users (id, name, email, signup_date)\n-- Query: Find users who signed up in the last 30 days\nSELECT', temp: 0.2 },
-        'story': { text: 'The old lighthouse stood on the cliff, its light flickering against the storm. Inside, the keeper', temp: 0.85 }
-    };
-
-    function updateVal(inputId, displayId) {
-        document.getElementById(displayId).innerText = document.getElementById(inputId).value;
-    }
-
-    function applyPreset() {
-        const val = document.getElementById('preset').value;
-        if(presets[val]) {
-            document.getElementById('prompt').value = presets[val].text;
-            document.getElementById('temperature').value = presets[val].temp;
-            updateVal('temperature', 'tempVal');
-        }
-    }
-
-    async function generate() {
-        const prompt = document.getElementById('prompt').value;
-        if (!prompt) return;
-
-        // UI Updates
-        document.getElementById('genBtn').style.display = 'none';
-        document.getElementById('stopBtn').style.display = 'inline-block';
-        outputDiv.innerHTML = '<span style="color: #6c7086;">Initializing stream...</span>';
-
-        abortController = new AbortController();
-        let fullText = "";
-
-        try {
-            const response = await fetch('/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: prompt,
-                    temperature: document.getElementById('temperature').value,
-                    max_tokens: document.getElementById('maxTokens').value
-                }),
-                signal: abortController.signal
-            });
-
-            // Handle Stream
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            outputDiv.innerHTML = ""; // Clear initializing message
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                
-                const chunk = decoder.decode(value, { stream: true });
-                fullText += chunk;
-                
-                // Render Markdown
-                outputDiv.innerHTML = marked.parse(fullText);
-                
-                // Apply Syntax Highlighting
-                document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-                
-                // Scroll to bottom
-                window.scrollTo(0, document.body.scrollHeight);
+    <script>
+        document.getElementById('predictionForm').addEventListener('submit', function(e) {
+            const prompt = document.getElementById('prompt').value.trim();
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            
+            if (!prompt) {
+                e.preventDefault();
+                alert('Please enter a prompt');
+                return;
             }
+            
+            // Show loading indicator
+            loading.classList.add('active');
+            submitBtn.disabled = true;
+        });
 
-        } catch (err) {
-            if (err.name === 'AbortError') {
-                outputDiv.innerHTML += "\n\n*[Stopped by user]*";
-            } else {
-                outputDiv.innerText += "\nError: " + err.message;
+        // Handle page load with prediction text
+        window.addEventListener('load', function() {
+            const resultBox = document.getElementById('resultBox');
+            if (resultBox.innerText.trim() === 'Your generated text will appear here...') {
+                // Initial state
             }
-        } finally {
-            document.getElementById('genBtn').style.display = 'inline-block';
-            document.getElementById('stopBtn').style.display = 'none';
-            abortController = null;
-        }
-    }
-
-    function stopGen() {
-        if (abortController) abortController.abort();
-    }
-</script>
-
+        });
+    </script>
 </body>
 </html>
