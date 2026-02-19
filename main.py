@@ -1,11 +1,12 @@
-import replicate
+from replicate import Replicate
+import httpx
 
-input = {"input": "the thing you habg your coat on so it doesn't get wrinkls is called a"}
+replicate = Replicate(
+    timeout=httpx.Timeout(120.0, read=120.0, write=60.0, connect=10.0)
+)
 
 for event in replicate.stream(
-    "deepseek-ai/deepseek-67b-base:0f2469607b150ffd428298a6bb57874f3657ab04fc980f7b5aa8fdad7bd6b46b",
-    input=input
+    "deepseek-ai/deepseek-67b-base:latest",
+    input={"input": "Hello world"},
 ):
-    print(event, end="")
-    #=> " computed"
-
+    print(event)
