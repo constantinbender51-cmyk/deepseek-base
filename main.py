@@ -15,7 +15,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together AI Interface</title>
+    <title>Together AI Interface - Base Model</title>
     <style>
         body { font-family: monospace; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #000; }
         textarea { width: 100%; height: 150px; margin-bottom: 1rem; font-family: inherit; box-sizing: border-box; }
@@ -26,16 +26,16 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h2>Together AI Model Interface</h2>
-    <p>Model: <code>meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8</code></p>
+    <p>Model: <code>meta-llama/Meta-Llama-3.1-8B</code> (Base Model)</p>
     
     <form method="POST">
-        <label for="prompt">System / User Prompt:</label><br><br>
-        <textarea id="prompt" name="prompt" required autofocus>{{ prompt if prompt else 'What are some fun things to do in New York?' }}</textarea><br>
+        <label for="prompt">Text to Complete:</label><br><br>
+        <textarea id="prompt" name="prompt" required autofocus>{{ prompt if prompt else 'The history of artificial intelligence began in the 1950s when' }}</textarea><br>
         <button type="submit">Send Request</button>
     </form>
 
     {% if response %}
-    <div class="output-box">{{ response }}</div>
+    <div class="output-box"><strong>Completion:</strong><br><br>{{ response }}</div>
     {% endif %}
     
     {% if error %}
@@ -55,13 +55,15 @@ def index():
         prompt = request.form.get("prompt", "")
         if prompt:
             try:
-                response = client.chat.completions.create(
-                    model="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
+                # 1. Use client.completions instead of client.chat.completions
+                response = client.completions.create(
+                    model="meta-llama/Meta-Llama-3.1-8B", # A standard base model
+                    prompt=prompt,                        # 2. Pass prompt directly, no messages array
+                    max_tokens=256,                       # Good practice to set a limit for base models
+                    temperature=0.7
                 )
-                response_text = response.choices[0].message.content
+                # 3. Parse the .text attribute instead of .message.content
+                response_text = response.choices[0].text
             except Exception as e:
                 error_text = f"API Error: {str(e)}"
 
