@@ -3,123 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSeek Base Interface</title>
+    <title>DeepSeek Base Generator</title>
     
-    <!-- Markdown Parser -->
+    <!-- Markdown and Syntax Highlighting Support -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <!-- Syntax Highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
     <style>
-        :root {
-            --bg: #1e1e2e;
-            --card-bg: #28283e;
-            --text: #cdd6f4;
-            --accent: #89b4fa;
-            --border: #45475a;
-        }
-
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1000px; margin: 0 auto; padding: 2rem; background-color: var(--bg); color: var(--text); }
+        :root { --bg: #1e1e2e; --surface: #313244; --text: #cdd6f4; --accent: #89b4fa; --border: #45475a; }
+        body { font-family: -apple-system, system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 2rem; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-        h1 { margin: 0; font-size: 1.5rem; color: var(--accent); }
+        .container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
         
-        .main-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+        /* Sidebar Styles */
+        .sidebar { background: var(--surface); padding: 20px; border-radius: 8px; border: 1px solid var(--border); height: fit-content; }
+        .control-group { margin-bottom: 1.5rem; }
+        label { display: block; font-size: 0.85rem; font-weight: bold; margin-bottom: 0.5rem; color: #a6adc8; }
+        select, input[type="range"] { width: 100%; padding: 8px; background: #181825; border: 1px solid var(--border); color: white; border-radius: 4px; box-sizing: border-box; }
+        .val-display { float: right; font-family: monospace; color: var(--accent); }
         
-        /* Controls Sidebar */
-        .controls { background: var(--card-bg); padding: 1.5rem; border-radius: 8px; height: fit-content; border: 1px solid var(--border); }
-        .control-group { margin-bottom: 1.2rem; }
-        .control-group label { display: block; font-size: 0.85rem; margin-bottom: 0.5rem; font-weight: bold; }
-        .control-group select, .control-group input[type="range"] { width: 100%; }
-        
-        input[type="range"] { accent-color: var(--accent); }
-        .value-display { font-size: 0.8rem; float: right; color: #a6adc8; }
-
-        /* Editor Area */
-        .editor-area { display: flex; flex-direction: column; gap: 1rem; }
-        
+        /* Editor Styles */
+        .editor-col { display: flex; flex-direction: column; gap: 1rem; }
         textarea { 
-            width: 100%; height: 150px; padding: 1rem; 
+            width: 100%; height: 160px; padding: 15px; 
             background: #181825; border: 1px solid var(--border); 
             color: var(--text); border-radius: 8px; 
-            font-family: 'Courier New', monospace; resize: vertical;
-            font-size: 1rem;
+            font-family: 'Courier New', monospace; font-size: 1rem;
+            resize: vertical; box-sizing: border-box;
         }
-        textarea:focus { outline: 1px solid var(--accent); }
+        textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
 
         .btn-row { display: flex; gap: 10px; }
-        
         button { 
-            padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: bold; border: none; transition: 0.2s; 
+            flex: 1; padding: 12px; border: none; border-radius: 6px; 
+            font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 1rem; 
         }
-        #generateBtn { background-color: var(--accent); color: #1e1e2e; flex-grow: 1; }
-        #generateBtn:hover { opacity: 0.9; }
-        #generateBtn:disabled { background-color: #555; cursor: not-allowed; }
-        
+        #genBtn { background-color: var(--accent); color: #1e1e2e; }
+        #genBtn:hover { opacity: 0.9; }
         #stopBtn { background-color: #f38ba8; color: #1e1e2e; display: none; }
-        
-        /* Output */
+
+        /* Output Styles */
         #output { 
-            background: #11111b; padding: 1.5rem; border-radius: 8px; 
-            border: 1px solid var(--border); min-height: 100px; 
-            line-height: 1.6; font-size: 0.95rem; overflow-x: auto;
+            background: #11111b; padding: 20px; border-radius: 8px; 
+            border: 1px solid var(--border); min-height: 150px; 
+            overflow-x: auto; line-height: 1.6;
         }
-        
-        /* Markdown Styles */
-        #output pre { background: #1e1e2e; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+        /* Markdown Overrides */
+        #output pre { background: #181825; padding: 1rem; border-radius: 6px; }
         #output code { font-family: 'Courier New', monospace; font-size: 0.9em; }
         #output p { margin-top: 0; }
-
-        @media (max-width: 768px) {
-            .main-grid { grid-template-columns: 1fr; }
-        }
+        
+        h1 { margin-top: 0; color: var(--accent); }
+        .badge { font-size: 0.5em; vertical-align: middle; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; color: #a6adc8; }
+        
+        @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>DeepSeek-67b <span style="font-size:0.6em; opacity:0.7; border:1px solid var(--border); padding: 2px 6px; border-radius: 4px;">BASE</span></h1>
-</div>
-
-<div class="main-grid">
-    <!-- Sidebar -->
-    <div class="controls">
+<div class="container">
+    <div class="sidebar">
+        <h1>DeepSeek <span class="badge">BASE</span></h1>
+        <p style="font-size: 0.8rem; color: #a6adc8;">This is a base model. It completes patterns rather than answering questions.</p>
+        
         <div class="control-group">
             <label>Presets</label>
-            <select id="presetSelect" onchange="applyPreset()" style="padding: 5px; background: #181825; color: white; border: 1px solid var(--border); border-radius: 4px;">
-                <option value="custom">Custom</option>
-                <option value="python">Python Code Completion</option>
+            <select id="preset" onchange="applyPreset()">
+                <option value="custom">Custom Prompt</option>
+                <option value="python">Python Code</option>
                 <option value="sql">SQL Query</option>
                 <option value="story">Creative Story</option>
-                <option value="email">Email Completion</option>
             </select>
         </div>
 
         <div class="control-group">
-            <label>Temperature <span id="tempVal" class="value-display">0.7</span></label>
-            <input type="range" id="temperature" min="0.1" max="2.0" step="0.1" value="0.7" oninput="document.getElementById('tempVal').innerText = this.value">
-            <small style="color:#7f849c; font-size: 0.75rem;">Lower for code, higher for creativity.</small>
+            <label>Temperature <span id="tempVal" class="val-display">0.7</span></label>
+            <input type="range" id="temperature" min="0.1" max="2.0" step="0.1" value="0.7" oninput="updateVal('temperature', 'tempVal')">
         </div>
 
         <div class="control-group">
-            <label>Max Tokens <span id="tokenVal" class="value-display">512</span></label>
-            <input type="range" id="maxTokens" min="64" max="2048" step="64" value="512" oninput="document.getElementById('tokenVal').innerText = this.value">
-        </div>
-
-        <div class="control-group">
-            <label>Top P <span id="topPVal" class="value-display">0.9</span></label>
-            <input type="range" id="topP" min="0.1" max="1.0" step="0.05" value="0.9" oninput="document.getElementById('topPVal').innerText = this.value">
+            <label>Max Tokens <span id="tokenVal" class="val-display">512</span></label>
+            <input type="range" id="maxTokens" min="64" max="2048" step="64" value="512" oninput="updateVal('maxTokens', 'tokenVal')">
         </div>
     </div>
 
-    <!-- Main Area -->
-    <div class="editor-area">
-        <textarea id="prompt" placeholder="def fibonacci(n):"></textarea>
+    <div class="editor-col">
+        <textarea id="prompt" placeholder="Type a sentence or code snippet to complete..."></textarea>
         
         <div class="btn-row">
-            <button id="generateBtn" onclick="startGeneration()">Generate Completion</button>
-            <button id="stopBtn" onclick="stopGeneration()">Stop</button>
+            <button id="genBtn" onclick="generate()">Generate</button>
+            <button id="stopBtn" onclick="stopGen()">Stop</button>
         </div>
 
         <div id="output"></div>
@@ -127,61 +101,57 @@
 </div>
 
 <script>
-    let controller = null; // For aborting fetch requests
+    let abortController = null;
     const outputDiv = document.getElementById('output');
     
-    // Presets for Base Model Prompting
+    // Base models need specific prompts to work well
     const presets = {
-        'python': { prompt: 'def binary_search(arr, low, high, x):\n    """\n    Recursive binary search implementation\n    """', temp: 0.2 },
-        'sql': { prompt: '-- Table: users (id, name, email, signup_date)\n-- Query: Find users who signed up in last 7 days\nSELECT', temp: 0.2 },
-        'story': { prompt: 'The old lighthouse stood on the cliff, its light flickering against the storm. Inside, the keeper', temp: 0.85 },
-        'email': { prompt: 'Subject: Project Update\n\nDear Team,\n\nI am writing to provide an update on the Q4 deliverables. Regarding the frontend migration, we', temp: 0.5 }
+        'python': { text: 'def binary_search(arr, target):\n    """\n    Iterative binary search implementation\n    """', temp: 0.2 },
+        'sql': { text: '-- Table: users (id, name, email, signup_date)\n-- Query: Find users who signed up in the last 30 days\nSELECT', temp: 0.2 },
+        'story': { text: 'The old lighthouse stood on the cliff, its light flickering against the storm. Inside, the keeper', temp: 0.85 }
     };
 
+    function updateVal(inputId, displayId) {
+        document.getElementById(displayId).innerText = document.getElementById(inputId).value;
+    }
+
     function applyPreset() {
-        const val = document.getElementById('presetSelect').value;
+        const val = document.getElementById('preset').value;
         if(presets[val]) {
-            document.getElementById('prompt').value = presets[val].prompt;
+            document.getElementById('prompt').value = presets[val].text;
             document.getElementById('temperature').value = presets[val].temp;
-            document.getElementById('tempVal').innerText = presets[val].temp;
+            updateVal('temperature', 'tempVal');
         }
     }
 
-    async function startGeneration() {
+    async function generate() {
         const prompt = document.getElementById('prompt').value;
         if (!prompt) return;
 
-        // UI State
-        const btn = document.getElementById('generateBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        btn.style.display = 'none';
-        stopBtn.style.display = 'inline-block';
-        outputDiv.innerHTML = '<span style="color:#7f849c; font-style:italic;">Initializing stream...</span>';
-        
-        let fullText = ""; // Accumulate text for Markdown rendering
+        // UI Updates
+        document.getElementById('genBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'inline-block';
+        outputDiv.innerHTML = '<span style="color: #6c7086;">Initializing stream...</span>';
 
-        // Prepare AbortController
-        controller = new AbortController();
-        const signal = controller.signal;
+        abortController = new AbortController();
+        let fullText = "";
 
         try {
             const response = await fetch('/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     prompt: prompt,
                     temperature: document.getElementById('temperature').value,
-                    max_tokens: document.getElementById('maxTokens').value,
-                    top_p: document.getElementById('topP').value
+                    max_tokens: document.getElementById('maxTokens').value
                 }),
-                signal: signal
+                signal: abortController.signal
             });
 
             // Handle Stream
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            
-            outputDiv.innerHTML = ""; // Clear "Initializing..."
+            outputDiv.innerHTML = ""; // Clear initializing message
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -190,37 +160,31 @@
                 const chunk = decoder.decode(value, { stream: true });
                 fullText += chunk;
                 
-                // Render Markdown periodically
-                // Note: For very long text, you might want to throttle this, 
-                // but for simple use cases, re-rendering is fine.
+                // Render Markdown
                 outputDiv.innerHTML = marked.parse(fullText);
                 
-                // Apply syntax highlighting to new code blocks
-                document.querySelectorAll('pre code').forEach((el) => {
-                    hljs.highlightElement(el);
-                });
+                // Apply Syntax Highlighting
+                document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
                 
-                // Auto-scroll to bottom
+                // Scroll to bottom
                 window.scrollTo(0, document.body.scrollHeight);
             }
 
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                outputDiv.innerHTML += '\n\n[Stopped by user]';
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                outputDiv.innerHTML += "\n\n*[Stopped by user]*";
             } else {
-                outputDiv.innerHTML += `\n\n[Error: ${error.message}]`;
+                outputDiv.innerText += "\nError: " + err.message;
             }
         } finally {
-            btn.style.display = 'inline-block';
-            stopBtn.style.display = 'none';
-            controller = null;
+            document.getElementById('genBtn').style.display = 'inline-block';
+            document.getElementById('stopBtn').style.display = 'none';
+            abortController = null;
         }
     }
 
-    function stopGeneration() {
-        if (controller) {
-            controller.abort();
-        }
+    function stopGen() {
+        if (abortController) abortController.abort();
     }
 </script>
 
