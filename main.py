@@ -1,40 +1,42 @@
 import os
 from flask import Flask, request, render_template_string
-from together import Together
+from openai import OpenAI
 
 app = Flask(__name__)
 
-# Initialize Together client
-client = Together()
+# Initialize the client pointing to OpenRouter instead of OpenAI
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ.get("OPENROUTER_API_KEY"),
+)
 
-# Utilitarian HTML template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Together AI Interface - Base Model</title>
+    <title>DeepSeek Base Engine</title>
     <style>
         body { font-family: monospace; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #000; }
         textarea { width: 100%; height: 150px; margin-bottom: 1rem; font-family: inherit; box-sizing: border-box; }
-        button { padding: 0.5rem 1rem; font-family: inherit; cursor: pointer; }
+        button { padding: 0.5rem 1rem; font-family: inherit; cursor: pointer; background: #eee; border: 1px solid #000; }
+        button:hover { background: #ddd; }
         .output-box { margin-top: 2rem; padding: 1rem; border: 1px solid #000; background: #f9f9f9; white-space: pre-wrap; word-wrap: break-word; }
         .error-box { margin-top: 2rem; padding: 1rem; border: 1px solid red; color: red; }
     </style>
 </head>
 <body>
-    <h2>Together AI Model Interface</h2>
-    <p>Model: <code>mistralai/Mistral-7B-v0.1</code> (Serverless Base Model)</p>
+    <h2>DeepSeek Raw Base Engine (via OpenRouter)</h2>
+    <p>Model: <code>deepseek/deepseek-coder</code> (Base Model)</p>
     
     <form method="POST">
         <label for="prompt">Text to Complete:</label><br><br>
-        <textarea id="prompt" name="prompt" required autofocus>{{ prompt if prompt else 'The history of artificial intelligence began in the 1950s when' }}</textarea><br>
-        <button type="submit">Send Request</button>
+        <textarea id="prompt" name="prompt" required autofocus>{{ prompt if prompt else 'def fast_inverse_square_root(number):\\n    """\\n    Computes the fast inverse square root\\n    """' }}</textarea><br>
+        <button type="submit">Run Engine</button>
     </form>
 
     {% if response %}
-    <div class="output-box"><strong>Completion:</strong><br><br>{{ response }}</div>
+    <div class="output-box"><strong>Continued Text:</strong><br><br>{{ response }}</div>
     {% endif %}
     
     {% if error %}
@@ -54,14 +56,24 @@ def index():
         prompt = request.form.get("prompt", "")
         if prompt:
             try:
-                # Swapped to a known serverless base model
+                # 1. Use the standard completions endpoint for the base model
                 response = client.completions.create(
-                    model="mistralai/Mistral-7B-v0.1", 
-                    prompt=prompt,                        
-                    max_tokens=256,                       
-                    temperature=0.7
+                    # This targets the DeepSeek Coder Base model (excellent logic/pattern engine)
+                    # You can also try: "deepseek/deepseek-llm-67b-base" if available
+                    model="deepseek/deepseek-coder", 
+                    prompt=prompt,
+                    max_tokens=300,
+                    temperature=0.6,
+                    # OpenRouter highly recommends passing these headers for analytics/ranking, but they are optional
+                    extra_headers={
+                        "HTTP-Referer": "https://your-app-url.com", # Optional
+                        "X-Title": "My Base Model App",             # Optional
+                    }
                 )
-                response_text = response.choices[0].text
+                
+                # 2. Append the raw completion to your prompt
+                response_text = prompt + response.choices[0].text
+                
             except Exception as e:
                 error_text = f"API Error: {str(e)}"
 
