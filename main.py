@@ -1,12 +1,9 @@
-from replicate import Replicate
-import httpx
+import replicate  # correct import
 
-replicate = Replicate(
-    timeout=httpx.Timeout(120.0, read=120.0, write=60.0, connect=10.0)
+# run a prediction
+output = replicate.run(
+    "deepseek-ai/deepseek-67b-base:latest",
+    input={"input": "Write a short story about a robot learning to paint."}
 )
 
-for event in replicate.stream(
-    "deepseek-ai/deepseek-67b-base:latest",
-    input={"input": "Hello world"},
-):
-    print(event)
+print(output)
