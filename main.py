@@ -10,18 +10,15 @@ client = OpenAI(
     api_key=os.environ.get("OPENROUTER_API_KEY"),
 )
 
-# Moved the default prompt out here to prevent Quote-Escaping crashes!
-DEFAULT_PROMPT = '''def fast_inverse_square_root(number):
-    """
-    Computes the fast inverse square root
-    """'''
+# A great test for a pure base model. It will just continue the thought.
+DEFAULT_PROMPT = '''The concept of time travel has fascinated humanity for centuries. However, the very first successful temporal displacement did not occur in a massive government laboratory, but rather'''
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>DeepSeek Base Engine</title>
+    <title>Llama 405B Base Engine</title>
     <style>
         body { font-family: monospace; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #000; }
         textarea { width: 100%; height: 150px; margin-bottom: 1rem; font-family: inherit; box-sizing: border-box; }
@@ -32,8 +29,8 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h2>DeepSeek Raw Base Engine (via OpenRouter)</h2>
-    <p>Model: <code>deepseek/deepseek-coder</code> (Base Model)</p>
+    <h2>Llama 3.1 405B - Raw Base Engine</h2>
+    <p>Model: <code>meta-llama/llama-3.1-405b</code> (Pure Base)</p>
     
     <form method="POST">
         <label for="prompt">Text to Complete:</label><br><br>
@@ -64,10 +61,10 @@ def index():
             try:
                 # Use standard completions for the base engine
                 response = client.completions.create(
-                    model="deepseek/deepseek-coder", 
+                    model="meta-llama/llama-3.1-405b", # The pure Llama 405B base model string on OpenRouter
                     prompt=prompt,
-                    max_tokens=300,
-                    temperature=0.6,
+                    max_tokens=300,  # Let it write a good paragraph or two
+                    temperature=0.7, # Good balance of creativity and logic
                     extra_headers={
                         "HTTP-Referer": "https://your-app-url.com", # Optional for OpenRouter
                         "X-Title": "My Base Model App",             # Optional for OpenRouter
@@ -83,7 +80,7 @@ def index():
     return render_template_string(
         HTML_TEMPLATE, 
         prompt=prompt, 
-        default_prompt=DEFAULT_PROMPT, # Pass the safe string in here
+        default_prompt=DEFAULT_PROMPT, 
         response=response_text, 
         error=error_text
     )
