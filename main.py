@@ -1,9 +1,15 @@
-import replicate  # correct import
+import replicate
+from replicate.exceptions import ReplicateError, RateLimitError
 
-# run a prediction
-output = replicate.run(
-    "deepseek-ai/deepseek-67b-base:latest",
-    input={"input": "Write a short story about a robot learning to paint."}
-)
+try:
+    output = replicate.run(
+        "deepseek-ai/deepseek-67b-base:0f2469607b150ffd428298a6bb57874f3657ab04fc980f7b5aa8fdad7bd6b46b",
+        input={"input": "Write a short story about a robot learning to paint."}
+    )
+    print(output)
 
-print(output)
+except RateLimitError as e:
+    print("Rate limited — slow down or wait:", e)
+
+except ReplicateError as e:
+    print("API Error:", e)
