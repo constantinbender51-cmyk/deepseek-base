@@ -4,15 +4,35 @@
     <title>DeepSeek</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; padding: 10px; }
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 10px; max-width: 600px; margin: 0 auto; }
         textarea { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
         pre { white-space: pre-wrap; word-wrap: break-word; background: #f5f5f5; padding: 10px; min-height: 100px; }
-        button { width: 100%; padding: 10px; margin-bottom: 10px; }
+        button { width: 100%; padding: 10px; margin: 10px 0; }
+        .param-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-bottom: 10px; align-items: center; }
+        input[type="number"] { width: 100%; padding: 5px; box-sizing: border-box; }
     </style>
 </head>
 <body>
     <form method="POST" action="/predict">
         <textarea name="prompt" rows="3" placeholder="Prompt">{{ prompt }}</textarea>
+        
+        <div class="param-grid">
+            <label>Temperature (0-2):</label>
+            <input type="number" name="temperature" min="0" max="2" step="0.1" value="{{ temp or 0.7 }}">
+            
+            <label>Max Length:</label>
+            <input type="number" name="max_length" min="1" max="2000" value="{{ max_len or 500 }}">
+            
+            <label>Top P (0-1):</label>
+            <input type="number" name="top_p" min="0" max="1" step="0.05" value="{{ top_p or 0.9 }}">
+            
+            <label>Frequency Penalty (0-2):</label>
+            <input type="number" name="frequency_penalty" min="0" max="2" step="0.1" value="{{ freq_pen or 0 }}">
+            
+            <label>Presence Penalty (0-2):</label>
+            <input type="number" name="presence_penalty" min="0" max="2" step="0.1" value="{{ pres_pen or 0 }}">
+        </div>
+        
         <button type="submit">Generate</button>
     </form>
     
