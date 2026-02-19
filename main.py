@@ -1,15 +1,20 @@
 import replicate
-from replicate.exceptions import ReplicateError, RateLimitError
 
 try:
-    output = replicate.run(
+    result = replicate.run(
         "deepseek-ai/deepseek-67b-base:0f2469607b150ffd428298a6bb57874f3657ab04fc980f7b5aa8fdad7bd6b46b",
         input={"input": "Write a short story about a robot learning to paint."}
     )
-    print(output)
+    print(result)
 
-except RateLimitError as e:
-    print("Rate limited — slow down or wait:", e)
+except replicate.RateLimitError as e:
+    print("Rate limit hit – wait and retry:", e)
 
-except ReplicateError as e:
-    print("API Error:", e)
+except replicate.APIStatusError as e:
+    print("API returned non-success status:", e.status_code, e.response)
+
+except replicate.APIConnectionError as e:
+    print("Connection issue:", str(e))
+
+except Exception as e:
+    print("Other error:", str(e))
