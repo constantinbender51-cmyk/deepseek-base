@@ -3,78 +3,223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DeepSeek Base Generator</title>
+    <title>DeepSeek Base Interface</title>
+    
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background-color: #f4f4f9; }
-        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #333; }
-        textarea { width: 100%; height: 150px; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: vertical; }
-        button { background-color: #007bff; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-size: 16px; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        #output { margin-top: 20px; white-space: pre-wrap; background: #eee; padding: 15px; border-radius: 4px; min-height: 50px; border: 1px solid #ddd; }
-        .label { font-weight: bold; margin-bottom: 5px; display: block; }
-        .error { color: #cc0000; }
+        :root {
+            --bg: #1e1e2e;
+            --card-bg: #28283e;
+            --text: #cdd6f4;
+            --accent: #89b4fa;
+            --border: #45475a;
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1000px; margin: 0 auto; padding: 2rem; background-color: var(--bg); color: var(--text); }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        h1 { margin: 0; font-size: 1.5rem; color: var(--accent); }
+        
+        .main-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+        
+        /* Controls Sidebar */
+        .controls { background: var(--card-bg); padding: 1.5rem; border-radius: 8px; height: fit-content; border: 1px solid var(--border); }
+        .control-group { margin-bottom: 1.2rem; }
+        .control-group label { display: block; font-size: 0.85rem; margin-bottom: 0.5rem; font-weight: bold; }
+        .control-group select, .control-group input[type="range"] { width: 100%; }
+        
+        input[type="range"] { accent-color: var(--accent); }
+        .value-display { font-size: 0.8rem; float: right; color: #a6adc8; }
+
+        /* Editor Area */
+        .editor-area { display: flex; flex-direction: column; gap: 1rem; }
+        
+        textarea { 
+            width: 100%; height: 150px; padding: 1rem; 
+            background: #181825; border: 1px solid var(--border); 
+            color: var(--text); border-radius: 8px; 
+            font-family: 'Courier New', monospace; resize: vertical;
+            font-size: 1rem;
+        }
+        textarea:focus { outline: 1px solid var(--accent); }
+
+        .btn-row { display: flex; gap: 10px; }
+        
+        button { 
+            padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: bold; border: none; transition: 0.2s; 
+        }
+        #generateBtn { background-color: var(--accent); color: #1e1e2e; flex-grow: 1; }
+        #generateBtn:hover { opacity: 0.9; }
+        #generateBtn:disabled { background-color: #555; cursor: not-allowed; }
+        
+        #stopBtn { background-color: #f38ba8; color: #1e1e2e; display: none; }
+        
+        /* Output */
+        #output { 
+            background: #11111b; padding: 1.5rem; border-radius: 8px; 
+            border: 1px solid var(--border); min-height: 100px; 
+            line-height: 1.6; font-size: 0.95rem; overflow-x: auto;
+        }
+        
+        /* Markdown Styles */
+        #output pre { background: #1e1e2e; padding: 1rem; border-radius: 4px; overflow-x: auto; }
+        #output code { font-family: 'Courier New', monospace; font-size: 0.9em; }
+        #output p { margin-top: 0; }
+
+        @media (max-width: 768px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>DeepSeek-67b (Base)</h1>
-    <p>Enter a prompt below. Since this is a "Base" model (not an Instruct model), it works best at completing sentences, stories, or code snippets rather than answering questions.</p>
-    
-    <label class="label" for="prompt">Prompt:</label>
-    <textarea id="prompt" placeholder="def fibonacci(n):"></textarea>
-    
-    <button id="generateBtn" onclick="generateText()">Generate</button>
-    
-    <div id="resultContainer" style="display:none;">
-        <label class="label">Result:</label>
+<div class="header">
+    <h1>DeepSeek-67b <span style="font-size:0.6em; opacity:0.7; border:1px solid var(--border); padding: 2px 6px; border-radius: 4px;">BASE</span></h1>
+</div>
+
+<div class="main-grid">
+    <!-- Sidebar -->
+    <div class="controls">
+        <div class="control-group">
+            <label>Presets</label>
+            <select id="presetSelect" onchange="applyPreset()" style="padding: 5px; background: #181825; color: white; border: 1px solid var(--border); border-radius: 4px;">
+                <option value="custom">Custom</option>
+                <option value="python">Python Code Completion</option>
+                <option value="sql">SQL Query</option>
+                <option value="story">Creative Story</option>
+                <option value="email">Email Completion</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>Temperature <span id="tempVal" class="value-display">0.7</span></label>
+            <input type="range" id="temperature" min="0.1" max="2.0" step="0.1" value="0.7" oninput="document.getElementById('tempVal').innerText = this.value">
+            <small style="color:#7f849c; font-size: 0.75rem;">Lower for code, higher for creativity.</small>
+        </div>
+
+        <div class="control-group">
+            <label>Max Tokens <span id="tokenVal" class="value-display">512</span></label>
+            <input type="range" id="maxTokens" min="64" max="2048" step="64" value="512" oninput="document.getElementById('tokenVal').innerText = this.value">
+        </div>
+
+        <div class="control-group">
+            <label>Top P <span id="topPVal" class="value-display">0.9</span></label>
+            <input type="range" id="topP" min="0.1" max="1.0" step="0.05" value="0.9" oninput="document.getElementById('topPVal').innerText = this.value">
+        </div>
+    </div>
+
+    <!-- Main Area -->
+    <div class="editor-area">
+        <textarea id="prompt" placeholder="def fibonacci(n):"></textarea>
+        
+        <div class="btn-row">
+            <button id="generateBtn" onclick="startGeneration()">Generate Completion</button>
+            <button id="stopBtn" onclick="stopGeneration()">Stop</button>
+        </div>
+
         <div id="output"></div>
     </div>
 </div>
 
 <script>
-    async function generateText() {
+    let controller = null; // For aborting fetch requests
+    const outputDiv = document.getElementById('output');
+    
+    // Presets for Base Model Prompting
+    const presets = {
+        'python': { prompt: 'def binary_search(arr, low, high, x):\n    """\n    Recursive binary search implementation\n    """', temp: 0.2 },
+        'sql': { prompt: '-- Table: users (id, name, email, signup_date)\n-- Query: Find users who signed up in last 7 days\nSELECT', temp: 0.2 },
+        'story': { prompt: 'The old lighthouse stood on the cliff, its light flickering against the storm. Inside, the keeper', temp: 0.85 },
+        'email': { prompt: 'Subject: Project Update\n\nDear Team,\n\nI am writing to provide an update on the Q4 deliverables. Regarding the frontend migration, we', temp: 0.5 }
+    };
+
+    function applyPreset() {
+        const val = document.getElementById('presetSelect').value;
+        if(presets[val]) {
+            document.getElementById('prompt').value = presets[val].prompt;
+            document.getElementById('temperature').value = presets[val].temp;
+            document.getElementById('tempVal').innerText = presets[val].temp;
+        }
+    }
+
+    async function startGeneration() {
         const prompt = document.getElementById('prompt').value;
+        if (!prompt) return;
+
+        // UI State
         const btn = document.getElementById('generateBtn');
-        const outputDiv = document.getElementById('output');
-        const resultContainer = document.getElementById('resultContainer');
+        const stopBtn = document.getElementById('stopBtn');
+        btn.style.display = 'none';
+        stopBtn.style.display = 'inline-block';
+        outputDiv.innerHTML = '<span style="color:#7f849c; font-style:italic;">Initializing stream...</span>';
+        
+        let fullText = ""; // Accumulate text for Markdown rendering
 
-        if (!prompt) return alert("Please enter a prompt");
-
-        // UI Loading State
-        btn.disabled = true;
-        btn.innerText = "Generating...";
-        outputDiv.innerText = "";
-        outputDiv.classList.remove('error');
-        resultContainer.style.display = 'block';
+        // Prepare AbortController
+        controller = new AbortController();
+        const signal = controller.signal;
 
         try {
             const response = await fetch('/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: prompt })
+                body: JSON.stringify({ 
+                    prompt: prompt,
+                    temperature: document.getElementById('temperature').value,
+                    max_tokens: document.getElementById('maxTokens').value,
+                    top_p: document.getElementById('topP').value
+                }),
+                signal: signal
             });
 
-            const data = await response.json();
+            // Handle Stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            outputDiv.innerHTML = ""; // Clear "Initializing..."
 
-            if (response.ok) {
-                // Determine if result is empty or valid
-                outputDiv.innerText = data.result || "(No output generated)";
-            } else {
-                // Handle backend errors (like missing API key)
-                outputDiv.innerText = "Error: " + (data.error || "Unknown server error");
-                outputDiv.classList.add('error');
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                fullText += chunk;
+                
+                // Render Markdown periodically
+                // Note: For very long text, you might want to throttle this, 
+                // but for simple use cases, re-rendering is fine.
+                outputDiv.innerHTML = marked.parse(fullText);
+                
+                // Apply syntax highlighting to new code blocks
+                document.querySelectorAll('pre code').forEach((el) => {
+                    hljs.highlightElement(el);
+                });
+                
+                // Auto-scroll to bottom
+                window.scrollTo(0, document.body.scrollHeight);
             }
+
         } catch (error) {
-            // Handle network errors
-            outputDiv.innerText = "Network Error: " + error.message;
-            outputDiv.classList.add('error');
+            if (error.name === 'AbortError') {
+                outputDiv.innerHTML += '\n\n[Stopped by user]';
+            } else {
+                outputDiv.innerHTML += `\n\n[Error: ${error.message}]`;
+            }
         } finally {
-            // Reset button state
-            btn.disabled = false;
-            btn.innerText = "Generate";
+            btn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            controller = null;
+        }
+    }
+
+    function stopGeneration() {
+        if (controller) {
+            controller.abort();
         }
     }
 </script>
