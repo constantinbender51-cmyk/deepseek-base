@@ -5,10 +5,9 @@ from together import Together
 app = Flask(__name__)
 
 # Initialize Together client
-# Auth defaults to os.environ.get("TOGETHER_API_KEY")
 client = Together()
 
-# Utilitarian, completely unstyled (beyond basic structure and monospace font) HTML template
+# Utilitarian HTML template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -26,7 +25,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <h2>Together AI Model Interface</h2>
-    <p>Model: <code>meta-llama/Meta-Llama-3.1-8B</code> (Base Model)</p>
+    <p>Model: <code>mistralai/Mistral-7B-v0.1</code> (Serverless Base Model)</p>
     
     <form method="POST">
         <label for="prompt">Text to Complete:</label><br><br>
@@ -55,14 +54,13 @@ def index():
         prompt = request.form.get("prompt", "")
         if prompt:
             try:
-                # 1. Use client.completions instead of client.chat.completions
+                # Swapped to a known serverless base model
                 response = client.completions.create(
-                    model="meta-llama/Meta-Llama-3.1-8B", # A standard base model
-                    prompt=prompt,                        # 2. Pass prompt directly, no messages array
-                    max_tokens=256,                       # Good practice to set a limit for base models
+                    model="mistralai/Mistral-7B-v0.1", 
+                    prompt=prompt,                        
+                    max_tokens=256,                       
                     temperature=0.7
                 )
-                # 3. Parse the .text attribute instead of .message.content
                 response_text = response.choices[0].text
             except Exception as e:
                 error_text = f"API Error: {str(e)}"
@@ -75,6 +73,5 @@ def index():
     )
 
 if __name__ == "__main__":
-    # Local testing fallback
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
