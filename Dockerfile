@@ -4,8 +4,9 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies
+# FIX: Changed 'libgl1-mesa-glx' to 'libgl1' for modern Linux support
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
