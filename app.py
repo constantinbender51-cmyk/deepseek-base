@@ -1,56 +1,45 @@
-import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from fastapi import FastAPI, UploadFile, File, Form
 from PIL import Image
-import torch
+import io
 import os
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Stock Image Describer", page_icon="🖼️", layout="centered")
+app = FastAPI(title="Moondream API")
 
-# --- LOAD AI MODEL (CACHED) ---
-# st.cache_resource ensures the model is only loaded into memory once when the app starts
-@st.cache_resource
-def load_model():
-    model_id = "vikhyatk/moondream2"
-    revision = "2024-08-26" # Using a stable revision
-    
-    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-    # Load model. We let PyTorch handle CPU mapping automatically.
+# Define model ID
+MODEL_ID = "vikhyatk/moondream2"
+REVISION = "2024-08-26" # Pinned for stability
+
+# Global variables for model and tokenizer
+model = None
+tokenizer = None
+
+@app.on_event("startup")
+async def load_model():
+    global model, tokenizer
+    print("Loading Moondream model... This may take a minute on the first boot.")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, revision=REVISION)
+    # We load standard CPU inference here
     model = AutoModelForCausalLM.from_pretrained(
-        model_id, 
-        trust_remote_code=True, 
-        revision=revision
+        MODEL_ID, 
+        trust_remote_code=True,
+        revision=REVISION
     )
-    model.eval() # Set model to evaluation mode
-    return tokenizer, model
+    model.eval()
+    print("Model loaded successfully!")
 
-with st.spinner("Loading AI Model into CPU Memory... (This takes a minute on startup)"):
-    tokenizer, model = load_model()
+@app.get("/")
+def read_root():
+    return {"status": "Moondream API is running. Send a POST request to /ask"}
 
-# --- USER INTERFACE ---
-st.title("🖼️ Stock Image Describer")
-st.write("Upload a stock image to generate descriptions, alt-text, or tags using an AI model running on CPU.")
-
-uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
-prompt = st.text_input("What do you want to know?", value="Write a detailed description of this stock image.")
-
-if uploaded_file is not None:
-    # Display the uploaded image
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-
-    if st.button("Generate Text", type="primary"):
-        with st.spinner("Analyzing image and generating text..."):
-            try:
-                # 1. Encode the image
-                enc_image = model.encode_image(image)
-                
-                # 2. Ask the model the question
-                answer = model.answer_question(enc_image, prompt, tokenizer)
-                
-                # 3. Output the result
-                st.success("Generation Complete!")
-                st.write("### Result:")
-                st.info(answer)
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
+@app.post("/ask")
+async def ask_question(prompt: str = Form(...), image: UploadFile = File(...)):
+    # Read the image file
+    image_bytes = await image.read()
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    
+    # Process image and generate answer
+    enc_image = model.encode_image(img)
+    answer = model.answer_question(enc_image, prompt, tokenizer)
+    
+    return {"prompt": prompt, "answer": answer}
