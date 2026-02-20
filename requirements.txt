@@ -1,5 +1,5 @@
-openai
-together 
-flask
-replicate
-gunicorn
+streamlit==1.32.2
+transformers==4.39.3
+pillow==10.2.0
+einops==0.7.0
+accelerate==0.28.0
