@@ -1,5 +1,5 @@
-streamlit==1.32.2
-transformers==4.39.3
-pillow==10.2.0
-einops==0.7.0
-accelerate==0.28.0
+streamlit>=1.40.0
+transformers>=4.46.0
+pillow>=11.0.0
+einops>=0.8.0
+accelerate>=0.34.0
