@@ -18,7 +18,7 @@ tokenizer = None
 async def load_model():
     global model, tokenizer
     print("Loading Moondream model... This may take a minute on the first boot.")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, revision=REVISION)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, revision=REVISION, trust_remote_code=True)
     # We load standard CPU inference here
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID, 
