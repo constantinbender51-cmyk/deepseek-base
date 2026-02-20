@@ -1,7 +1,7 @@
 
 torch
 torchvision
-transformers=4.44.2
+transformers==4.44.2
 einops
 Pillow
 fastapi
