@@ -1,9 +1,6 @@
-
-torch
-torchvision
-transformers==4.44.2
-einops
-Pillow
 fastapi
 uvicorn
-python-multipart
+openai
+python-dotenv
+jinja2
+pydantic
