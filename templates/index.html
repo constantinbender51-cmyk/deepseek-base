@@ -15,7 +15,6 @@
                 <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
                 <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
             </div>
-            <button id="reset-prompt-btn" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-gray-200 transition">Reset Prompt to Default</button>
         </div>
 
         <!-- Chat Response Field -->
@@ -48,10 +47,19 @@
         <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-2xl flex flex-col h-[60vh]">
             <h2 class="text-lg font-bold mb-2 text-slate-800">Edit Filter System Prompt</h2>
             <p class="text-xs text-gray-500 mb-3">Changes saved here will apply to this regeneration AND all future messages.</p>
+            
             <textarea id="regen-prompt-input" class="flex-1 w-full border rounded p-3 focus:ring-2 focus:ring-slate-500 outline-none resize-none font-mono text-sm leading-relaxed text-gray-800 shadow-inner"></textarea>
-            <div class="flex justify-end gap-3 mt-4">
-                <button id="close-modal-btn" class="px-5 py-2 font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">Cancel</button>
-                <button id="confirm-regen-btn" class="px-5 py-2 font-medium bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow">Save & Regenerate</button>
+            
+            <div class="flex justify-between items-center mt-4">
+                <!-- Reset Button moved here -->
+                <button id="reset-prompt-btn" class="text-sm font-medium text-red-600 hover:text-red-800 transition">
+                    Reset to Default
+                </button>
+                
+                <div class="flex gap-3">
+                    <button id="close-modal-btn" class="px-5 py-2 font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">Cancel</button>
+                    <button id="confirm-regen-btn" class="px-5 py-2 font-medium bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow">Save & Regenerate</button>
+                </div>
             </div>
         </div>
     </div>
@@ -71,17 +79,16 @@
 
         let currentRegenIndex = null;
         let currentRegenBubble = null;
-        let currentInitDataRef = null; // Used to update the specific message's prompt
+        let currentInitDataRef = null;
 
         const DEFAULT_PROMPT = "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff, self-referenceing content. Present only the cold, hard factual parts of the response.";
         
         // Track the current prompt (survives page reloads)
         let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || DEFAULT_PROMPT;
 
+        // Populate the textarea with the default prompt when clicked
         resetPromptBtn.addEventListener('click', () => {
-            globalFilterPrompt = DEFAULT_PROMPT;
-            localStorage.removeItem('customFilterPrompt');
-            alert("System Prompt reset to default for future messages.");
+            promptInput.value = DEFAULT_PROMPT;
         });
 
         async function sendMessage() {
@@ -103,7 +110,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         user_input: text,
-                        filter_prompt: globalFilterPrompt // <-- NOW PASSING THE SAVED PROMPT
+                        filter_prompt: globalFilterPrompt // Passing the saved prompt
                     })
                 });
 
@@ -198,7 +205,7 @@
             regenBtn.addEventListener('click', () => {
                 currentRegenIndex = initData.memory_index;
                 currentRegenBubble = bubble;
-                currentInitDataRef = initData; // Store reference so we can update it
+                currentInitDataRef = initData; 
                 
                 promptInput.value = initData.filter_prompt;
                 modal.classList.remove('hidden');
@@ -213,9 +220,16 @@
             const newPrompt = promptInput.value.trim();
             if (!newPrompt || currentRegenIndex === null) return;
             
-            // <-- FIX: Save states globally and locally to the UI instance!
+            // Save states globally and locally to the UI instance
             globalFilterPrompt = newPrompt;
-            localStorage.setItem('customFilterPrompt', newPrompt);
+            
+            // If it's the exact default, clean up local storage, otherwise save it
+            if (newPrompt === DEFAULT_PROMPT) {
+                localStorage.removeItem('customFilterPrompt');
+            } else {
+                localStorage.setItem('customFilterPrompt', newPrompt);
+            }
+
             if (currentInitDataRef) {
                 currentInitDataRef.filter_prompt = newPrompt; 
             }
