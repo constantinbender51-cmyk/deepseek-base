@@ -18,8 +18,7 @@ client = AsyncOpenAI(
     base_url="https://api.deepseek.com" # DeepSeek base URL
 )
 
-# RAM Memory (stores User prompts and LLM 1 original responses)
-# Format: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+# RAM Memory (stores User prompts and LLM 2 FILTERED responses)
 conversation_memory = [
     {"role": "system", "content": "You are a helpful assistant."}
 ]
@@ -38,7 +37,7 @@ async def chat_endpoint(req: ChatRequest):
     # 1. Append User Input to memory
     conversation_memory.append({"role": "user", "content": user_text})
     
-    # 2. Get LLM 1 (Original) Response
+    # 2. Get LLM 1 (Original) Response based on memory
     llm1_response = await client.chat.completions.create(
         model="deepseek-chat",
         messages=conversation_memory,
@@ -47,12 +46,10 @@ async def chat_endpoint(req: ChatRequest):
     
     original_text = llm1_response.choices[0].message.content
     
-    # 3. Append LLM 1 original response to memory 
-    conversation_memory.append({"role": "assistant", "content": original_text})
+    # NOTE: We NO LONGER append original_text to conversation_memory here.
     
-    # 4. Filter the Response (LLM 2) & Stream
+    # 3. Filter the Response (LLM 2) & Stream
     async def generate_filtered_stream():
-        # ---> UPDATED FILTER PROMPT HERE <---
         filter_prompt = [
             {
                 "role": "system", 
@@ -71,9 +68,21 @@ async def chat_endpoint(req: ChatRequest):
             stream=True
         )
         
-        async for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
+        filtered_text_accumulator = ""
+        
+        try:
+            async for chunk in stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    filtered_text_accumulator += content  # Accumulate the chunks
+                    yield content
+        finally:
+            # 4. Append the fully built filtered response to memory
+            # The 'finally' block ensures this saves even if the client disconnects mid-stream
+            if filtered_text_accumulator:
+                conversation_memory.append({
+                    "role": "assistant", 
+                    "content": filtered_text_accumulator
+                })
 
     return StreamingResponse(generate_filtered_stream(), media_type="text/plain")
