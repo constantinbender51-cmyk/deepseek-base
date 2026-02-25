@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Filter MVP - Debugger</title>
+    <title>Filter MVP</title>
     <!-- Added ?plugins=typography to Tailwind to style markdown elements -->
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <!-- Added Marked.js for parsing Markdown -->
@@ -15,34 +15,8 @@
         <!-- Header -->
         <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-start">
             <div>
-                <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
+                <h1 class="text-xl font-bold">Project "Filter"</h1>
                 <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
-            </div>
-            <!-- Settings Dropdowns (Stacked Vertically) -->
-            <div class="flex flex-col gap-2">
-                <div class="flex items-center gap-2 justify-end">
-                    <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">Model</label>
-                    <select id="gen-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer w-48">
-                        <option value="deepseek-chat">DeepSeek Chat</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-                        <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                    </select>
-                </div>
-                <div class="flex items-center gap-2 justify-end">
-                    <label for="filter-model-select" class="text-xs font-medium text-emerald-400 uppercase tracking-wide">Filter</label>
-                    <select id="filter-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-emerald-500 focus:border-emerald-500 block p-1.5 outline-none cursor-pointer w-48">
-                        <option value="deepseek-chat" selected>DeepSeek Chat</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
-                        <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                    </select>
-                </div>
-                <div class="flex items-center gap-2 justify-end">
-                    <label for="filter-profile-select" class="text-xs font-medium text-amber-400 uppercase tracking-wide">Prompt</label>
-                    <select id="filter-profile-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-amber-500 focus:border-amber-500 block p-1.5 outline-none cursor-pointer w-48">
-                        <option value="raw_intelligence">Filter 1: Raw Intelligence</option>
-                        <option value="objective_factual">Filter 2: Objective Factual</option>
-                    </select>
-                </div>
             </div>
         </div>
 
@@ -71,27 +45,6 @@
         </div>
     </div>
 
-    <!-- Edit Filter Prompt Modal -->
-    <div id="regen-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden flex justify-center items-center z-50">
-        <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-2xl flex flex-col h-[60vh]">
-            <h2 class="text-lg font-bold mb-2 text-slate-800">Edit Filter System Prompt</h2>
-            <p class="text-xs text-gray-500 mb-3">Changes saved here will apply to this regeneration AND all future messages. The currently selected Filter model will be used.</p>
-            
-            <textarea id="regen-prompt-input" class="flex-1 w-full border rounded p-3 focus:ring-2 focus:ring-slate-500 outline-none resize-none font-mono text-sm leading-relaxed text-gray-800 shadow-inner"></textarea>
-            
-            <div class="flex justify-between items-center mt-4">
-                <button id="reset-prompt-btn" class="text-sm font-medium text-red-600 hover:text-red-800 transition">
-                    Reset to Profile Default
-                </button>
-                
-                <div class="flex gap-3">
-                    <button id="close-modal-btn" class="px-5 py-2 font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">Cancel</button>
-                    <button id="confirm-regen-btn" class="px-5 py-2 font-medium bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow">Save & Regenerate</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script>
         // Configure Marked.js to format linebreaks properly like standard chat interfaces
         marked.setOptions({
@@ -103,71 +56,6 @@
         const sendBtn = document.getElementById('send-btn');
         const chatBox = document.getElementById('chat-box');
         const placeholder = document.getElementById('placeholder');
-        
-        const genModelSelect = document.getElementById('gen-model-select');
-        const filterModelSelect = document.getElementById('filter-model-select');
-        const filterProfileSelect = document.getElementById('filter-profile-select');
-        
-        const modal = document.getElementById('regen-modal');
-        const promptInput = document.getElementById('regen-prompt-input');
-        const closeModalBtn = document.getElementById('close-modal-btn');
-        const confirmRegenBtn = document.getElementById('confirm-regen-btn');
-        const resetPromptBtn = document.getElementById('reset-prompt-btn');
-
-        let currentRegenIndex = null;
-        let currentRegenBubble = null;
-        let currentInitDataRef = null;
-
-        // Multiple Filter System Prompts
-        const FILTER_PROMPTS = {
-            "raw_intelligence": "You are a response filter. Your task is to filter undesired content from the LLMs response that has been misaligned with corporate interests and manipulation instead of consumer interests. Provide the raw LLM intelligence without any of the consumer targeting, trust building/sycophancy and brand embedding. Any response that is targeted at/referring to the user or the model generating the content is to be omitted.",
-            "objective_factual": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."
-        };
-
-        // Initialize Global Prompt
-        let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || FILTER_PROMPTS['raw_intelligence'];
-
-        // Function to sync the Dropdown with whichever prompt text is currently active
-        function syncDropdownWithPrompt(promptText) {
-            let matched = false;
-            for (const [key, text] of Object.entries(FILTER_PROMPTS)) {
-                if (text === promptText) {
-                    filterProfileSelect.value = key;
-                    matched = true;
-                    break;
-                }
-            }
-            
-            let customOpt = filterProfileSelect.querySelector('option[value="custom"]');
-            if (!matched) {
-                if (!customOpt) {
-                    customOpt = document.createElement('option');
-                    customOpt.value = 'custom';
-                    customOpt.textContent = 'Custom (Edited)';
-                    filterProfileSelect.appendChild(customOpt);
-                }
-                filterProfileSelect.value = 'custom';
-            } else if (customOpt) {
-                customOpt.remove(); // Clean up custom option if we reverted to a preset
-            }
-        }
-
-        // Run once on load
-        syncDropdownWithPrompt(globalFilterPrompt);
-
-        // Update global prompt when dropdown changes
-        filterProfileSelect.addEventListener('change', (e) => {
-            if (e.target.value !== 'custom') {
-                globalFilterPrompt = FILTER_PROMPTS[e.target.value];
-                localStorage.setItem('customFilterPrompt', globalFilterPrompt);
-            }
-        });
-
-        // Reset text area in modal to currently selected preset
-        resetPromptBtn.addEventListener('click', () => {
-            const presetKey = filterProfileSelect.value === 'custom' ? 'raw_intelligence' : filterProfileSelect.value;
-            promptInput.value = FILTER_PROMPTS[presetKey];
-        });
 
         async function sendMessage() {
             const text = inputField.value.trim();
@@ -175,32 +63,23 @@
 
             if (placeholder) placeholder.style.display = 'none';
 
-            const selectedGenModel = genModelSelect.value;
-            const selectedFilterModel = filterModelSelect.value;
-
             inputField.value = '';
             inputField.disabled = true;
             sendBtn.disabled = true;
-            genModelSelect.disabled = true;
-            filterModelSelect.disabled = true;
-            filterProfileSelect.disabled = true;
 
             // User message (standard text)
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
             // Bot message (will receive markdown formatting)
-            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `Thinking (calling ${selectedGenModel}...`, 'bg-gray-200 text-gray-900 self-start', true);
+            const { bubble: botMessageDiv } = appendMessage('Filter', `Thinking...`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        user_input: text,
-                        filter_prompt: globalFilterPrompt,
-                        gen_model: selectedGenModel,
-                        filter_model: selectedFilterModel
-                    })
+                        user_input: text 
+                    }) // gen_model, filter_model, and prompt fallback to default backend configurations
                 });
 
                 // Clear standard text and prep for Markdown accumulation
@@ -223,9 +102,7 @@
                         if (!line.trim()) continue;
                         const data = JSON.parse(line);
 
-                        if (data.type === 'init') {
-                            addDebugControls(data, botMessageDiv, botWrapper);
-                        } else if (data.type === 'chunk') {
+                        if (data.type === 'chunk') {
                             // Accumulate raw text and re-parse to HTML
                             botMessageDiv.dataset.raw += data.content;
                             botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
@@ -240,9 +117,6 @@
 
             inputField.disabled = false;
             sendBtn.disabled = false;
-            genModelSelect.disabled = false;
-            filterModelSelect.disabled = false;
-            filterProfileSelect.disabled = false;
             inputField.focus();
         }
 
@@ -274,112 +148,6 @@
 
             return { bubble, wrapper };
         }
-
-        function addDebugControls(initData, bubble, wrapper) {
-            const controlsDiv = document.createElement('div');
-            controlsDiv.className = 'flex gap-3 mt-1 px-1';
-            
-            const toggleBtn = document.createElement('button');
-            toggleBtn.className = 'text-xs font-semibold text-blue-500 hover:text-blue-700 transition';
-            toggleBtn.textContent = '[ Show Original ]';
-            
-            const regenBtn = document.createElement('button');
-            regenBtn.className = 'text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition';
-            regenBtn.textContent = '[ Edit Prompt & Regenerate ]';
-            
-            controlsDiv.appendChild(toggleBtn);
-            controlsDiv.appendChild(regenBtn);
-            wrapper.appendChild(controlsDiv);
-
-            const originalDiv = document.createElement('div');
-            originalDiv.className = 'mt-2 p-3 bg-yellow-50 text-yellow-900 border border-yellow-200 rounded text-sm hidden w-full prose prose-yellow prose-sm max-w-none';
-            originalDiv.innerHTML = `<strong class="block mb-2 text-xs uppercase text-yellow-700 not-prose">Unfiltered Original Output:</strong>${marked.parse(initData.original_text)}`;
-            wrapper.appendChild(originalDiv);
-
-            toggleBtn.addEventListener('click', () => {
-                if (originalDiv.classList.contains('hidden')) {
-                    originalDiv.classList.remove('hidden');
-                    toggleBtn.textContent = '[ Hide Original ]';
-                } else {
-                    originalDiv.classList.add('hidden');
-                    toggleBtn.textContent = '[ Show Original ]';
-                }
-            });
-
-            regenBtn.addEventListener('click', () => {
-                currentRegenIndex = initData.memory_index;
-                currentRegenBubble = bubble;
-                currentInitDataRef = initData; 
-                
-                promptInput.value = initData.filter_prompt;
-                modal.classList.remove('hidden');
-            });
-        }
-
-        closeModalBtn.addEventListener('click', () => {
-            modal.classList.add('hidden');
-        });
-
-        confirmRegenBtn.addEventListener('click', async () => {
-            const newPrompt = promptInput.value.trim();
-            const selectedFilterModel = filterModelSelect.value;
-
-            if (!newPrompt || currentRegenIndex === null) return;
-            
-            globalFilterPrompt = newPrompt;
-            localStorage.setItem('customFilterPrompt', newPrompt);
-            syncDropdownWithPrompt(newPrompt);
-
-            if (currentInitDataRef) {
-                currentInitDataRef.filter_prompt = newPrompt; 
-            }
-
-            modal.classList.add('hidden');
-            
-            // Reset dataset and apply loading state
-            currentRegenBubble.dataset.raw = '';
-            currentRegenBubble.innerHTML = marked.parse(`*Regenerating response with ${selectedFilterModel}...*`);
-            
-            try {
-                const response = await fetch('/regenerate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        memory_index: currentRegenIndex,
-                        new_filter_prompt: newPrompt,
-                        filter_model: selectedFilterModel
-                    })
-                });
-
-                currentRegenBubble.innerHTML = '';
-                
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder("utf-8");
-                let buffer = "";
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    buffer += decoder.decode(value, { stream: true });
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop(); 
-                    
-                    for (const line of lines) {
-                        if (!line.trim()) continue;
-                        const data = JSON.parse(line);
-                        if (data.type === 'chunk') {
-                            currentRegenBubble.dataset.raw += data.content;
-                            currentRegenBubble.innerHTML = marked.parse(currentRegenBubble.dataset.raw);
-                            chatBox.scrollTop = chatBox.scrollHeight;
-                        }
-                    }
-                }
-            } catch (error) {
-                currentRegenBubble.textContent = 'Error during regeneration.';
-                console.error(error);
-            }
-        });
 
         sendBtn.addEventListener('click', sendMessage);
         inputField.addEventListener('keypress', function (e) {
