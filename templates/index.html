@@ -70,8 +70,8 @@
             // User message (standard text)
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
-            // Bot message (will receive markdown formatting)
-            const { bubble: botMessageDiv } = appendMessage('Filter', `Thinking...`, 'bg-gray-200 text-gray-900 self-start', true);
+            // Bot message - Shows LLM 1 Name in the loading state
+            const { bubble: botMessageDiv } = appendMessage('Filter', `*Thinking (calling DeepSeek)...*`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
@@ -79,7 +79,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         user_input: text 
-                    }) // gen_model, filter_model, and prompt fallback to default backend configurations
+                    })
                 });
 
                 // Clear standard text and prep for Markdown accumulation
@@ -92,7 +92,14 @@
 
                 while (true) {
                     const { done, value } = await reader.read();
-                    if (done) break;
+                    
+                    if (done) {
+                        // STREAM FINISHED: Inject the LLM 2 Name at the bottom of the message
+                        botMessageDiv.dataset.raw += '\n\n<div class="text-[10px] text-emerald-600 font-bold border-t border-gray-300 pt-2 mt-3 uppercase tracking-wider not-prose">Filtered by Qwen-1.5B</div>';
+                        botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
+                        chatBox.scrollTop = chatBox.scrollHeight;
+                        break;
+                    }
                     
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
