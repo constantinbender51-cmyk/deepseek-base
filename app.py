@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import re
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -14,45 +15,30 @@ load_dotenv()
 app = FastAPI(title="Filter MVP - Debug Mode")
 templates = Jinja2Templates(directory="templates")
 
-# 1. Initialize DeepSeek Client
-ds_client = AsyncOpenAI(
-    api_key=os.getenv("DSKEY", ""),
-    base_url="https://api.deepseek.com"
-)
-
-# 2. Initialize Gemini Client
-gemini_client = AsyncOpenAI(
-    api_key=os.getenv("GKEY", ""),
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
-
-# 3. Initialize Custom Local Qwen Client (Railway)
-qwen_client = AsyncOpenAI(
-    api_key="not-needed",
-    base_url=os.getenv("FILTER_URL", "http://localhost:8080/v1")
-)
+ds_client = AsyncOpenAI(api_key=os.getenv("DSKEY", ""), base_url="https://api.deepseek.com")
+gemini_client = AsyncOpenAI(api_key=os.getenv("GKEY", ""), base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+qwen_client = AsyncOpenAI(api_key="not-needed", base_url=os.getenv("FILTER_URL", "http://localhost:8080/v1"))
 
 def get_client(model_name: str) -> AsyncOpenAI:
     name_lower = model_name.lower()
-    if "gemini" in name_lower:
-        return gemini_client
-    if "qwen" in name_lower:
-        return qwen_client
+    if "gemini" in name_lower: return gemini_client
+    if "qwen" in name_lower: return qwen_client
     return ds_client
 
-DEFAULT_FILTER_PROMPT = """You are a precise response filter. Your task is to find emotional, trust-building, sycophantic, or brand-embedding content in the Original Response.
-Extract and write down the exact sentences or phrases that should be removed, word-for-word.
-Put each exact quote on a new line. Do not add any extra text, markdown, or commentary. 
-If nothing needs to be removed, output exactly NONE."""
+# UPDATED: The prompt instructs the model to use [start...end] for copying, and normal text for adding.
+DEFAULT_FILTER_PROMPT = """You are an intelligent editor. Your task is to rewrite the ORIGINAL RESPONSE to remove emotional, trust-building, sycophantic, or brand-embedding content.
+To save time and preserve exact formatting, you MUST use a special shorthand to copy approved segments from the ORIGINAL RESPONSE. 
+Format: [START_WORDS...END_WORDS]
+- START_WORDS must be at least 5 exact letters from the beginning of the segment.
+- END_WORDS must be at least 5 exact letters from the end of the segment.
 
-conversation_memory = [
-    {
-        "role": "system", 
-        "content": "You are a helpful assistant.",
-        "original_content": None,
-        "filter_prompt": None
-    }
-]
+You can also write your own new text normally anywhere outside the brackets to bridge thoughts together.
+
+Example Original: "As an AI, I am happy to help! The capital of France is Paris. Let me know if you need more."
+Example Output: "[The cap...Paris.]"
+"""
+
+conversation_memory = [{"role": "system", "content": "You are a helpful assistant.", "original_content": None, "filter_prompt": None}]
 
 def get_clean_memory():
     return [{"role": m["role"], "content": m["content"]} for m in conversation_memory]
@@ -68,21 +54,34 @@ class RegenerateRequest(BaseModel):
     new_filter_prompt: str
     filter_model: str = "deepseek-chat"
 
-def apply_deletions(original_text: str, deletions_text: str) -> str:
-    """Takes the raw output from the filter model and removes those exact strings from the original text."""
-    if not deletions_text or "NONE" in deletions_text[:15]:
-        return original_text
+def reconstruct_text(original_text: str, filter_output: str) -> str:
+    """Parses the filter's output, finds the [start...end] citations, and injects the original text."""
+    # Regex looks for anything inside brackets separated by 3 or more dots
+    pattern = r'\[(.*?)\.{3,}(.*?)\]'
     
-    final_text = original_text
-    lines = deletions_text.split('\n')
-    
-    for line in lines:
-        cleaned = line.strip(' "-*\'')
-        if len(cleaned) > 4 and cleaned in final_text:
-            final_text = final_text.replace(cleaned, "")
-            
-    final_text = final_text.replace("  ", " ").replace("\n\n\n", "\n\n").strip()
-    return final_text
+    def repl(match):
+        start_str = match.group(1).strip()
+        end_str = match.group(2).strip()
+        
+        # 1. Try exact match
+        start_idx = original_text.find(start_str)
+        if start_idx != -1:
+            end_idx = original_text.find(end_str, start_idx)
+            if end_idx != -1:
+                return original_text[start_idx : end_idx + len(end_str)]
+                
+        # 2. Try case-insensitive fallback match
+        start_idx_lower = original_text.lower().find(start_str.lower())
+        if start_idx_lower != -1:
+            end_idx_lower = original_text.lower().find(end_str.lower(), start_idx_lower)
+            if end_idx_lower != -1:
+                return original_text[start_idx_lower : end_idx_lower + len(end_str)]
+        
+        # 3. If the filter hallucinated text that doesn't exist, show an error tag in debug
+        return f"[Extraction Failed: {start_str}...{end_str}]"
+        
+    final_text = re.sub(pattern, repl, filter_output)
+    return final_text.strip()
 
 @app.get("/")
 async def serve_page(request: Request):
@@ -92,19 +91,13 @@ async def serve_page(request: Request):
 async def chat_endpoint(req: ChatRequest):
     user_text = req.user_input
     filter_prompt_text = req.filter_prompt or DEFAULT_FILTER_PROMPT
-    
     gen_model_name = req.gen_model
     filter_model_name = req.filter_model
     
     gen_client = get_client(gen_model_name)
     filter_client = get_client(filter_model_name)
     
-    conversation_memory.append({
-        "role": "user", 
-        "content": user_text,
-        "original_content": None,
-        "filter_prompt": None
-    })
+    conversation_memory.append({"role": "user", "content": user_text, "original_content": None, "filter_prompt": None})
     
     llm1_response = await gen_client.chat.completions.create(
         model=gen_model_name,
@@ -113,38 +106,16 @@ async def chat_endpoint(req: ChatRequest):
     )
     
     original_text = llm1_response.choices[0].message.content
-    
     memory_index = len(conversation_memory)
-    conversation_memory.append({
-        "role": "assistant",
-        "content": "",
-        "original_content": original_text,
-        "filter_prompt": filter_prompt_text
-    })
+    conversation_memory.append({"role": "assistant", "content": "", "original_content": original_text, "filter_prompt": filter_prompt_text})
     
     async def generate_filtered_stream():
-        init_data = {
-            "type": "init",
-            "memory_index": memory_index,
-            "original_text": original_text,
-            "filter_prompt": filter_prompt_text
-        }
+        init_data = {"type": "init", "memory_index": memory_index, "original_text": original_text, "filter_prompt": filter_prompt_text}
         yield json.dumps(init_data) + "\n"
 
         filter_prompt_payload = [
-            {
-                "role": "system", 
-                "content": filter_prompt_text
-            },
-            {
-                "role": "user", 
-                "content": (
-                    f"ORIGINAL RESPONSE:\n"
-                    f"{original_text}\n\n"
-                    f"TASK:\n"
-                    f"Extract the exact word-for-word text to remove according to your system prompt instructions."
-                )
-            }
+            {"role": "system", "content": filter_prompt_text},
+            {"role": "user", "content": f"ORIGINAL RESPONSE:\n{original_text}\n\nTASK:\nRewrite using the [start...end] shorthand for keeping text, and normal typing for new text."}
         ]
         
         qwen_response = await filter_client.chat.completions.create(
@@ -153,17 +124,18 @@ async def chat_endpoint(req: ChatRequest):
             stream=False 
         )
         
-        deletions_found = qwen_response.choices[0].message.content
+        shorthand_output = qwen_response.choices[0].message.content
         
-        # SEND RAW DELETIONS TO FRONTEND FOR DEBUGGER
-        yield json.dumps({"type": "deletions", "content": deletions_found}) + "\n"
+        # SEND RAW SHORTHAND TO FRONTEND FOR DEBUGGER
+        yield json.dumps({"type": "deletions", "content": shorthand_output}) + "\n"
         
-        final_filtered_text = apply_deletions(original_text, deletions_found)
-        conversation_memory[memory_index]["content"] = final_filtered_text
+        # Backend reconstructing the actual string using the shorthand commands
+        final_reconstructed_text = reconstruct_text(original_text, shorthand_output)
+        conversation_memory[memory_index]["content"] = final_reconstructed_text
         
         chunk_size = 5
-        for i in range(0, len(final_filtered_text), chunk_size):
-            chunk = final_filtered_text[i:i+chunk_size]
+        for i in range(0, len(final_reconstructed_text), chunk_size):
+            chunk = final_reconstructed_text[i:i+chunk_size]
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
             await asyncio.sleep(0.01) 
 
@@ -179,7 +151,6 @@ async def regenerate_endpoint(req: RegenerateRequest):
 
     original_text = conversation_memory[idx]["original_content"]
     new_prompt = req.new_filter_prompt
-    
     filter_model_name = req.filter_model
     filter_client = get_client(filter_model_name)
     
@@ -188,19 +159,8 @@ async def regenerate_endpoint(req: RegenerateRequest):
 
     async def regenerate_stream():
         filter_prompt_payload = [
-            {
-                "role": "system", 
-                "content": new_prompt
-            },
-            {
-                "role": "user", 
-                "content": (
-                    f"ORIGINAL RESPONSE:\n"
-                    f"{original_text}\n\n"
-                    f"TASK:\n"
-                    f"Extract the exact word-for-word text to remove according to your system prompt instructions."
-                )
-            }
+            {"role": "system", "content": new_prompt},
+            {"role": "user", "content": f"ORIGINAL RESPONSE:\n{original_text}\n\nTASK:\nRewrite using the [start...end] shorthand for keeping text, and normal typing for new text."}
         ]
         
         qwen_response = await filter_client.chat.completions.create(
@@ -209,17 +169,17 @@ async def regenerate_endpoint(req: RegenerateRequest):
             stream=False
         )
         
-        deletions_found = qwen_response.choices[0].message.content
+        shorthand_output = qwen_response.choices[0].message.content
         
-        # SEND RAW DELETIONS TO FRONTEND FOR DEBUGGER
-        yield json.dumps({"type": "deletions", "content": deletions_found}) + "\n"
+        # SEND RAW SHORTHAND TO FRONTEND FOR DEBUGGER
+        yield json.dumps({"type": "deletions", "content": shorthand_output}) + "\n"
         
-        final_filtered_text = apply_deletions(original_text, deletions_found)
-        conversation_memory[idx]["content"] = final_filtered_text
+        final_reconstructed_text = reconstruct_text(original_text, shorthand_output)
+        conversation_memory[idx]["content"] = final_reconstructed_text
         
         chunk_size = 5
-        for i in range(0, len(final_filtered_text), chunk_size):
-            chunk = final_filtered_text[i:i+chunk_size]
+        for i in range(0, len(final_reconstructed_text), chunk_size):
+            chunk = final_reconstructed_text[i:i+chunk_size]
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
             await asyncio.sleep(0.01)
 
