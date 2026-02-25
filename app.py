@@ -32,7 +32,8 @@ def get_client(model_name: str) -> AsyncOpenAI:
         return gemini_client
     return ds_client
 
-DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."""
+# Updated Default to "Filter 1" (Raw Intelligence) just in case a blank request falls through.
+DEFAULT_FILTER_PROMPT = """You are a response filter. Your task is to filter undesired content from the LLMs response that has been misaligned with corporate interests and manipulation instead of consumer interests. Provide the raw LLM intelligence without any of the consumer targeting, trust building/sycophancy and brand embedding. Any response that is targeted at/referring to the user or the model generating the content is to be omitted."""
 
 # RAM Memory (stores User prompts and LLM 2 FILTERED responses, plus debug metadata)
 conversation_memory = [
