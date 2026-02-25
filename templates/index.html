@@ -35,14 +35,13 @@
                         <option value="deepseek-chat" selected>DeepSeek Chat</option>
                         <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                        <!-- ADDED QWEN TO FILTER DROPDOWN HERE -->
                         <option value="qwen-1.5b-local">Qwen 1.5B (Local)</option>
                     </select>
                 </div>
                 <div class="flex items-center gap-2 justify-end">
                     <label for="filter-profile-select" class="text-xs font-medium text-amber-400 uppercase tracking-wide">Prompt</label>
                     <select id="filter-profile-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-amber-500 focus:border-amber-500 block p-1.5 outline-none cursor-pointer w-48">
-                        <option value="raw_intelligence">Filter 1: Raw Intelligence</option>
+                        <option value="raw_intelligence">Filter 1: Extraction & Removal</option>
                         <option value="objective_factual">Filter 2: Objective Factual</option>
                     </select>
                 </div>
@@ -96,7 +95,6 @@
     </div>
 
     <script>
-        // Configure Marked.js to format linebreaks properly like standard chat interfaces
         marked.setOptions({
             breaks: true,
             gfm: true
@@ -121,16 +119,13 @@
         let currentRegenBubble = null;
         let currentInitDataRef = null;
 
-        // Multiple Filter System Prompts
         const FILTER_PROMPTS = {
-            "raw_intelligence": "You are a response filter. Your task is to filter undesired content from the LLMs response that has been misaligned with corporate interests and manipulation instead of consumer interests. Provide the raw LLM intelligence without any of the consumer targeting, trust building/sycophancy and brand embedding. Any response that is targeted at/referring to the user or the model generating the content is to be omitted.",
-            "objective_factual": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."
+            "raw_intelligence": "You are a precise response filter. Your task is to find emotional, trust-building, sycophantic, or brand-embedding content in the Original Response.\nExtract and write down the exact sentences or phrases that should be removed, word-for-word.\nPut each exact quote on a new line. Do not add any extra text, markdown, or commentary. \nIf nothing needs to be removed, output exactly NONE.",
+            "objective_factual": "You are a strict objective filter. Find any sentence that contains opinions, personal feelings, conversational filler, or self-reference to being an AI.\nWrite down the exact quotes to remove, word-for-word, each on a new line. Output NONE if the text is perfectly factual."
         };
 
-        // Initialize Global Prompt
         let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || FILTER_PROMPTS['raw_intelligence'];
 
-        // Function to sync the Dropdown with whichever prompt text is currently active
         function syncDropdownWithPrompt(promptText) {
             let matched = false;
             for (const [key, text] of Object.entries(FILTER_PROMPTS)) {
@@ -148,16 +143,15 @@
                     customOpt.value = 'custom';
                     customOpt.textContent = 'Custom (Edited)';
                     filterProfileSelect.appendChild(customOpt);
-                }filterProfileSelect.value = 'custom';
+                }
+                filterProfileSelect.value = 'custom';
             } else if (customOpt) {
-                customOpt.remove(); // Clean up custom option if we reverted to a preset
+                customOpt.remove();
             }
         }
 
-        // Run once on load
         syncDropdownWithPrompt(globalFilterPrompt);
 
-        // Update global prompt when dropdown changes
         filterProfileSelect.addEventListener('change', (e) => {
             if (e.target.value !== 'custom') {
                 globalFilterPrompt = FILTER_PROMPTS[e.target.value];
@@ -165,7 +159,6 @@
             }
         });
 
-        // Reset text area in modal to currently selected preset
         resetPromptBtn.addEventListener('click', () => {
             const presetKey = filterProfileSelect.value === 'custom' ? 'raw_intelligence' : filterProfileSelect.value;
             promptInput.value = FILTER_PROMPTS[presetKey];
@@ -179,10 +172,7 @@
 
             const selectedGenModel = genModelSelect.value;
             const selectedFilterModel = filterModelSelect.value;
-            
-            // Get the human-readable names for the UI
             const genModelName = genModelSelect.options[genModelSelect.selectedIndex].text;
-            const filterModelName = filterModelSelect.options[filterModelSelect.selectedIndex].text;
 
             inputField.value = '';
             inputField.disabled = true;
@@ -191,11 +181,10 @@
             filterModelSelect.disabled = true;
             filterProfileSelect.disabled = true;
 
-            // User message (standard text)
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
-            // Bot message - Dynamically shows which LLM is generating
-            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `*Thinking (calling ${genModelName})...*`, 'bg-gray-200 text-gray-900 self-start', true);
+            // Updated loading message
+            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `*Generating & Extracting...*`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
@@ -209,7 +198,6 @@
                     })
                 });
 
-                // Clear standard text and prep for Markdown accumulation
                 botMessageDiv.innerHTML = ''; 
                 botMessageDiv.dataset.raw = '';
 
@@ -219,14 +207,7 @@
 
                 while (true) {
                     const { done, value } = await reader.read();
-                    
-                    if (done) {
-                        // Dynamically show which LLM did the filtering at the bottom
-                        botMessageDiv.dataset.raw += `\n\n<div class="text-[10px] text-emerald-600 font-bold border-t border-gray-300 pt-2 mt-3 uppercase tracking-wider not-prose">Filtered by ${filterModelName}</div>`;
-                        botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                        break;
-                    }
+                    if (done) break;
                     
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
@@ -239,7 +220,6 @@
                         if (data.type === 'init') {
                             addDebugControls(data, botMessageDiv, botWrapper);
                         } else if (data.type === 'chunk') {
-                            // Accumulate raw text and re-parse to HTML
                             botMessageDiv.dataset.raw += data.content;
                             botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
                             chatBox.scrollTop = chatBox.scrollHeight;
@@ -268,7 +248,6 @@
             label.textContent = sender;
             
             const bubble = document.createElement('div');
-            // Apply Tailwind Typography 'prose' only if it's a markdown-enabled bubble
             const formatClasses = isMarkdown ? 'prose prose-slate prose-sm max-w-none' : 'whitespace-pre-wrap';
             bubble.className = `p-3 rounded-lg shadow-sm ${formatClasses} ${classes}`;
             
@@ -336,7 +315,6 @@
         confirmRegenBtn.addEventListener('click', async () => {
             const newPrompt = promptInput.value.trim();
             const selectedFilterModel = filterModelSelect.value;
-            const filterModelName = filterModelSelect.options[filterModelSelect.selectedIndex].text;
 
             if (!newPrompt || currentRegenIndex === null) return;
             
@@ -350,9 +328,8 @@
 
             modal.classList.add('hidden');
             
-            // Reset dataset and apply loading state
             currentRegenBubble.dataset.raw = '';
-            currentRegenBubble.innerHTML = marked.parse(`*Regenerating response with ${filterModelName}...*`);
+            currentRegenBubble.innerHTML = marked.parse(`*Extracting & Regenerating...*`);
             
             try {
                 const response = await fetch('/regenerate', {
@@ -373,12 +350,7 @@
 
                 while (true) {
                     const { done, value } = await reader.read();
-                    if (done) {
-                        currentRegenBubble.dataset.raw += `\n\n<div class="text-[10px] text-emerald-600 font-bold border-t border-gray-300 pt-2 mt-3 uppercase tracking-wider not-prose">Filtered by ${filterModelName}</div>`;
-                        currentRegenBubble.innerHTML = marked.parse(currentRegenBubble.dataset.raw);
-                        chatBox.scrollTop = chatBox.scrollHeight;
-                        break;
-                    }
+                    if (done) break;
                     
                     buffer += decoder.decode(value, { stream: true });
                     const lines = buffer.split('\n');
