@@ -10,13 +10,11 @@
 <body class="bg-gray-100 h-screen flex flex-col justify-center items-center p-4">
 
     <div class="w-full max-w-3xl bg-white rounded-lg shadow-lg flex flex-col h-[85vh] relative">
-        <!-- Header -->
         <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-start">
             <div>
                 <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
                 <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
             </div>
-            <!-- Settings Dropdowns -->
             <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2 justify-end">
                     <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">Model</label>
@@ -39,35 +37,22 @@
                 <div class="flex items-center gap-2 justify-end">
                     <label for="filter-profile-select" class="text-xs font-medium text-amber-400 uppercase tracking-wide">Prompt</label>
                     <select id="filter-profile-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-amber-500 focus:border-amber-500 block p-1.5 outline-none cursor-pointer w-48">
-                        <option value="raw_intelligence">Filter 1: Extraction & Removal</option>
-                        <option value="objective_factual">Filter 2: Objective Factual</option>
+                        <option value="raw_intelligence">Filter 1: Shorthand Inclusions</option>
+                        <option value="objective_factual">Filter 2: Objective Mixing</option>
                     </select>
                 </div>
             </div>
         </div>
 
-        <!-- Chat Response Field -->
         <div id="chat-box" class="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50 pb-6">
             <div class="text-gray-400 text-center italic mt-10" id="placeholder">
                 Waiting for input...
             </div>
         </div>
 
-        <!-- Text Input & Send Button -->
         <div class="p-4 bg-white border-t rounded-b-lg flex gap-2">
-            <input 
-                type="text" 
-                id="user-input" 
-                class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-slate-500"
-                placeholder="Type your prompt here..."
-                autocomplete="off"
-            >
-            <button 
-                id="send-btn" 
-                class="bg-slate-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-slate-700 transition disabled:bg-slate-400"
-            >
-                Send
-            </button>
+            <input type="text" id="user-input" class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-slate-500" placeholder="Type your prompt here..." autocomplete="off">
+            <button id="send-btn" class="bg-slate-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-slate-700 transition disabled:bg-slate-400">Send</button>
         </div>
     </div>
 
@@ -80,10 +65,7 @@
             <textarea id="regen-prompt-input" class="flex-1 w-full border rounded p-3 focus:ring-2 focus:ring-slate-500 outline-none resize-none font-mono text-sm leading-relaxed text-gray-800 shadow-inner"></textarea>
             
             <div class="flex justify-between items-center mt-4">
-                <button id="reset-prompt-btn" class="text-sm font-medium text-red-600 hover:text-red-800 transition">
-                    Reset to Profile Default
-                </button>
-                
+                <button id="reset-prompt-btn" class="text-sm font-medium text-red-600 hover:text-red-800 transition">Reset to Profile Default</button>
                 <div class="flex gap-3">
                     <button id="close-modal-btn" class="px-5 py-2 font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">Cancel</button>
                     <button id="confirm-regen-btn" class="px-5 py-2 font-medium bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow">Save & Regenerate</button>
@@ -93,10 +75,7 @@
     </div>
 
     <script>
-        marked.setOptions({
-            breaks: true,
-            gfm: true
-        });
+        marked.setOptions({ breaks: true, gfm: true });
 
         const inputField = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
@@ -118,8 +97,8 @@
         let currentInitDataRef = null;
 
         const FILTER_PROMPTS = {
-            "raw_intelligence": "You are a precise response filter. Your task is to find emotional, trust-building, sycophantic, or brand-embedding content in the Original Response.\nExtract and write down the exact sentences or phrases that should be removed, word-for-word.\nPut each exact quote on a new line. Do not add any extra text, markdown, or commentary. \nIf nothing needs to be removed, output exactly NONE.",
-            "objective_factual": "You are a strict objective filter. Find any sentence that contains opinions, personal feelings, conversational filler, or self-reference to being an AI.\nWrite down the exact quotes to remove, word-for-word, each on a new line. Output NONE if the text is perfectly factual."
+            "raw_intelligence": "You are an intelligent editor. Your task is to rewrite the ORIGINAL RESPONSE to remove emotional, trust-building, sycophantic, or brand-embedding content.\nTo save time and preserve exact formatting, you MUST use a special shorthand to copy approved segments from the ORIGINAL RESPONSE. \nFormat: [START_WORDS...END_WORDS]\n- START_WORDS must be at least 5 exact letters from the beginning of the segment.\n- END_WORDS must be at least 5 exact letters from the end of the segment.\n\nYou can also write your own new text normally anywhere outside the brackets to bridge thoughts together.\n\nExample Original: \"As an AI, I am happy to help! The capital of France is Paris. Let me know if you need more.\"\nExample Output: \"[The cap...Paris.]\"",
+            "objective_factual": "You are a factual summarizer. Use the [start...end] shorthand format to extract the exact facts from the original response. If you need to summarize or bridge two facts together, write your own text outside of the brackets."
         };
 
         let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || FILTER_PROMPTS['raw_intelligence'];
@@ -179,8 +158,7 @@
             filterProfileSelect.disabled = true;
 
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
-            
-            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `*Generating & Extracting...*`, 'bg-gray-200 text-gray-900 self-start', true);
+            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `*LLM 1 Generating & LLM 2 Extracting...*`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
@@ -218,7 +196,6 @@
                             currentMemoryIndex = data.memory_index;
                             addDebugControls(data, botMessageDiv, botWrapper);
                         } else if (data.type === 'deletions') {
-                            // Find the specific extracted div for this message and populate it
                             const extractedDiv = document.getElementById(`extracted-${currentMemoryIndex}`);
                             if (extractedDiv) {
                                 const contentSpan = extractedDiv.querySelector('.extracted-content');
@@ -282,7 +259,7 @@
 
             const toggleExtractedBtn = document.createElement('button');
             toggleExtractedBtn.className = 'text-xs font-semibold text-purple-600 hover:text-purple-800 transition';
-            toggleExtractedBtn.textContent = '[ Show Extracted ]';
+            toggleExtractedBtn.textContent = '[ Show Filter Shorthand ]';
             
             const regenBtn = document.createElement('button');
             regenBtn.className = 'text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition';
@@ -293,17 +270,15 @@
             controlsDiv.appendChild(regenBtn);
             wrapper.appendChild(controlsDiv);
 
-            // Container for Original Unfiltered Text
             const originalDiv = document.createElement('div');
             originalDiv.className = 'mt-2 p-3 bg-yellow-50 text-yellow-900 border border-yellow-200 rounded text-sm hidden w-full prose prose-yellow prose-sm max-w-none';
             originalDiv.innerHTML = `<strong class="block mb-2 text-xs uppercase text-yellow-700 not-prose">Unfiltered Original Output (LLM 1):</strong>${marked.parse(initData.original_text)}`;
             wrapper.appendChild(originalDiv);
 
-            // Container for Raw Deletions (Extracted by Filter Model)
             const extractedDiv = document.createElement('div');
             extractedDiv.id = `extracted-${initData.memory_index}`;
             extractedDiv.className = 'mt-2 p-3 bg-purple-50 text-purple-900 border border-purple-200 rounded text-sm hidden w-full prose prose-purple prose-sm max-w-none';
-            extractedDiv.innerHTML = `<strong class="block mb-2 text-xs uppercase text-purple-700 not-prose">Extracted for Deletion (LLM 2):</strong><span class="extracted-content"><i>Waiting for Filter Model...</i></span>`;
+            extractedDiv.innerHTML = `<strong class="block mb-2 text-xs uppercase text-purple-700 not-prose">Raw Filter Output (LLM 2):</strong><span class="extracted-content"><i>Waiting for Filter Model...</i></span>`;
             wrapper.appendChild(extractedDiv);
 
             toggleBtn.addEventListener('click', () => {
@@ -319,10 +294,10 @@
             toggleExtractedBtn.addEventListener('click', () => {
                 if (extractedDiv.classList.contains('hidden')) {
                     extractedDiv.classList.remove('hidden');
-                    toggleExtractedBtn.textContent = '[ Hide Extracted ]';
+                    toggleExtractedBtn.textContent = '[ Hide Filter Shorthand ]';
                 } else {
                     extractedDiv.classList.add('hidden');
-                    toggleExtractedBtn.textContent = '[ Show Extracted ]';
+                    toggleExtractedBtn.textContent = '[ Show Filter Shorthand ]';
                 }
             });
 
@@ -359,7 +334,6 @@
             currentRegenBubble.dataset.raw = '';
             currentRegenBubble.innerHTML = marked.parse(`*Extracting & Regenerating...*`);
             
-            // Reset the extracted div so it shows loading again
             const extractedDiv = document.getElementById(`extracted-${currentRegenIndex}`);
             if (extractedDiv) {
                 const contentSpan = extractedDiv.querySelector('.extracted-content');
