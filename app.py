@@ -56,11 +56,11 @@ async def chat_endpoint(req: ChatRequest):
         filter_prompt = [
             {
                 "role": "system", 
-                "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard fact."
+                "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only raw filtered responss."
             },
             {
                 "role": "user", 
-                "content": f"Filter this text: {original_text}"
+                "content": f"Original User Prompt: {user_text}\n\nResponse to filter: {original_text}"
             }
         ]
         
