@@ -12,8 +12,15 @@ load_dotenv()
 app = FastAPI(title="Filter MVP")
 templates = Jinja2Templates(directory="templates")
 
-# Initialize DeepSeek Client
-client = AsyncOpenAI(
+# Initialize Gemini Client (LLM 1 - Original Response)
+# Using Google's OpenAI-compatible endpoint so message formatting remains identical
+gemini_client = AsyncOpenAI(
+    api_key=os.getenv("GKEY"),
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+# Initialize DeepSeek Client (LLM 2 - Filter Response)
+deepseek_client = AsyncOpenAI(
     api_key=os.getenv("DSKEY"),
     base_url="https://api.deepseek.com"
 )
@@ -37,19 +44,19 @@ async def chat_endpoint(req: ChatRequest):
     # 1. Append User Input to memory
     conversation_memory.append({"role": "user", "content": user_text})
     
-    # 2. Get LLM 1 (Original) Response
-    llm1_response = await client.chat.completions.create(
-        model="deepseek-chat",
+    # 2. Get LLM 1 (Original) Response using GEMINI
+    llm1_response = await gemini_client.chat.completions.create(
+        model="gemini-2.0-flash", # Note: Change to "gemini-1.5-flash" if "2.0" is unavailable in your tier
         messages=conversation_memory,
         stream=False
     )
     
     original_text = llm1_response.choices[0].message.content
     
-    # 3. Filter the Response (LLM 2) & Stream
+    # 3. Filter the Response (LLM 2) & Stream using DEEPSEEK
     async def generate_filtered_stream():
         
-        # --- NEW: Build the chat history string for context ---
+        # --- Build the chat history string for context ---
         history_lines = []
         # Skip the first element (System prompt)
         for msg in conversation_memory[1:]:
@@ -59,11 +66,11 @@ async def chat_endpoint(req: ChatRequest):
         formatted_history = "\n\n".join(history_lines)
         # ------------------------------------------------------
 
-        # --- UPDATED FILTER PROMPT ---
+        # --- FILTER PROMPT ---
         filter_prompt = [
             {
                 "role": "system", 
-                "content": "You are a rigid filter. Strip the text from emotions, opinions, filler words, conversational fluff, and brand embedding/identify priming. " 
+                "content": "You are a rigid filter. Strip the text from emotions, opinions, filler words, conversational fluff, and brand embedding/identify priming." 
             },
             {
                 "role": "user", 
@@ -79,8 +86,8 @@ async def chat_endpoint(req: ChatRequest):
             }
         ]
         
-        # Call LLM 2 with streaming enabled
-        stream = await client.chat.completions.create(
+        # Call LLM 2 (DeepSeek) with streaming enabled
+        stream = await deepseek_client.chat.completions.create(
             model="deepseek-chat",
             messages=filter_prompt,
             stream=True
