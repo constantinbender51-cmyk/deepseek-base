@@ -12,10 +12,10 @@ load_dotenv()
 app = FastAPI(title="Filter MVP")
 templates = Jinja2Templates(directory="templates")
 
-# Initialize DeepSeek Client
+# Initialize DeepSeek Client (using OpenAI SDK)
 client = AsyncOpenAI(
     api_key=os.getenv("DSKEY"),
-    base_url="https://api.deepseek.com"
+    base_url="https://api.deepseek.com" # DeepSeek base URL
 )
 
 # RAM Memory (stores User prompts and LLM 2 FILTERED responses)
@@ -37,7 +37,7 @@ async def chat_endpoint(req: ChatRequest):
     # 1. Append User Input to memory
     conversation_memory.append({"role": "user", "content": user_text})
     
-    # 2. Get LLM 1 (Original) Response
+    # 2. Get LLM 1 (Original) Response based on memory
     llm1_response = await client.chat.completions.create(
         model="deepseek-chat",
         messages=conversation_memory,
@@ -46,20 +46,10 @@ async def chat_endpoint(req: ChatRequest):
     
     original_text = llm1_response.choices[0].message.content
     
+    # NOTE: We NO LONGER append original_text to conversation_memory here.
+    
     # 3. Filter the Response (LLM 2) & Stream
     async def generate_filtered_stream():
-        
-        # --- NEW: Build the chat history string for context ---
-        history_lines = []
-        # Skip the first element (System prompt)
-        for msg in conversation_memory[1:]:
-            speaker = "User" if msg["role"] == "user" else "Assistant"
-            history_lines.append(f"{speaker}: {msg['content']}")
-        
-        formatted_history = "\n\n".join(history_lines)
-        # ------------------------------------------------------
-
-        # --- UPDATED FILTER PROMPT ---
         filter_prompt = [
             {
                 "role": "system", 
@@ -67,15 +57,7 @@ async def chat_endpoint(req: ChatRequest):
             },
             {
                 "role": "user", 
-                "content": (
-                    f"CONTEXT (Full Chat History):\n"
-                    f"{formatted_history}\n\n"
-                    f"==================\n\n"
-                    f"UNFILTERED RESPONSE TO THE LATEST PROMPT:\n"
-                    f"{original_text}\n\n"
-                    f"TASK:\n"
-                    f"Using the context above if needed, apply your filtering rules to the UNFILTERED RESPONSE. Output ONLY the filtered text."
-                )
+                "content": f"Original User Prompt: {user_text}\n\nResponse to filter: {original_text}"
             }
         ]
         
@@ -92,10 +74,11 @@ async def chat_endpoint(req: ChatRequest):
             async for chunk in stream:
                 content = chunk.choices[0].delta.content
                 if content:
-                    filtered_text_accumulator += content
+                    filtered_text_accumulator += content  # Accumulate the chunks
                     yield content
         finally:
             # 4. Append the fully built filtered response to memory
+            # The 'finally' block ensures this saves even if the client disconnects mid-stream
             if filtered_text_accumulator:
                 conversation_memory.append({
                     "role": "assistant", 
