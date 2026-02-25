@@ -14,10 +14,23 @@ app = FastAPI(title="Filter MVP")
 templates = Jinja2Templates(directory="templates")
 
 # Initialize DeepSeek Client
-client = AsyncOpenAI(
-    api_key=os.getenv("DSKEY"),
+ds_client = AsyncOpenAI(
+    api_key=os.getenv("DSKEY", ""),
     base_url="https://api.deepseek.com"
 )
+
+# Initialize Gemini Client
+# Gemini cleanly supports the OpenAI SDK wrapper via Google's compatibility endpoint 
+gemini_client = AsyncOpenAI(
+    api_key=os.getenv("GKEY", ""),
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
+def get_client(model_name: str) -> AsyncOpenAI:
+    """Routes the request to the correct API client based on the model name."""
+    if "gemini" in model_name.lower():
+        return gemini_client
+    return ds_client
 
 DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."""
 
@@ -38,10 +51,12 @@ def get_clean_memory():
 class ChatRequest(BaseModel):
     user_input: str
     filter_prompt: str | None = None
+    model: str = "deepseek-chat"
 
 class RegenerateRequest(BaseModel):
     memory_index: int
     new_filter_prompt: str
+    model: str = "deepseek-chat"
 
 @app.get("/")
 async def serve_page(request: Request):
@@ -51,6 +66,8 @@ async def serve_page(request: Request):
 async def chat_endpoint(req: ChatRequest):
     user_text = req.user_input
     filter_prompt_text = req.filter_prompt or DEFAULT_FILTER_PROMPT
+    model_name = req.model
+    active_client = get_client(model_name)
     
     # 1. Append User Input to memory
     conversation_memory.append({
@@ -61,8 +78,8 @@ async def chat_endpoint(req: ChatRequest):
     })
     
     # 2. Get LLM 1 (Original) Response
-    llm1_response = await client.chat.completions.create(
-        model="deepseek-chat",
+    llm1_response = await active_client.chat.completions.create(
+        model=model_name,
         messages=get_clean_memory(),
         stream=False
     )
@@ -117,8 +134,8 @@ async def chat_endpoint(req: ChatRequest):
         ]
         
         # Call LLM 2 with streaming enabled
-        stream = await client.chat.completions.create(
-            model="deepseek-chat",
+        stream = await active_client.chat.completions.create(
+            model=model_name,
             messages=filter_prompt_payload,
             stream=True
         )
@@ -148,6 +165,8 @@ async def regenerate_endpoint(req: RegenerateRequest):
 
     original_text = conversation_memory[idx]["original_content"]
     new_prompt = req.new_filter_prompt
+    model_name = req.model
+    active_client = get_client(model_name)
     
     # Update stored prompt and reset current content
     conversation_memory[idx]["filter_prompt"] = new_prompt
@@ -181,8 +200,8 @@ async def regenerate_endpoint(req: RegenerateRequest):
             }
         ]
         
-        stream = await client.chat.completions.create(
-            model="deepseek-chat",
+        stream = await active_client.chat.completions.create(
+            model=model_name,
             messages=filter_prompt_payload,
             stream=True
         )
