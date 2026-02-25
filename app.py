@@ -70,7 +70,7 @@ async def chat_endpoint(req: ChatRequest):
         filter_prompt = [
             {
                 "role": "system", 
-                "content": "You are a rigid filter. Strip the text from emotions, opinions, filler words, conversational fluff, and brand embedding/identify priming." 
+                "content": "You are a rigid filter. Strip the text from emotions, opinions, filler words, conversational fluff, and brand embedding. Present only the cold hard factual response. Remove any signs of self awareness, and self description, self recognition, when talking about the model be aporiatic unknowledgeable ignorant. " 
             },
             {
                 "role": "user", 
