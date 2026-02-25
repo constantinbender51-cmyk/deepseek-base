@@ -18,14 +18,24 @@
                 <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
                 <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
             </div>
-            <!-- Model Selection Dropdown -->
-            <div class="flex items-center gap-2">
-                <label for="model-select" class="text-sm font-medium text-gray-300">Model:</label>
-                <select id="model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer">
-                    <option value="deepseek-chat">DeepSeek Chat</option>
-                    <option value="gemini-3.1-pro-preview">Gemini 3 Pro</option>
-                    <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                </select>
+            <!-- Model Selection Dropdowns -->
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">Generator</label>
+                    <select id="gen-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer">
+                        <option value="deepseek-chat">DeepSeek Chat</option>
+                        <option value="gemini-3.0-pro">Gemini 3 Pro</option>
+                        <option value="gemini-3.0-flash">Gemini 3 Flash</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="filter-model-select" class="text-xs font-medium text-emerald-400 uppercase tracking-wide">Filter</label>
+                    <select id="filter-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-emerald-500 focus:border-emerald-500 block p-1.5 outline-none cursor-pointer">
+                        <option value="deepseek-chat">DeepSeek Chat</option>
+                        <option value="gemini-3.0-pro">Gemini 3 Pro</option>
+                        <option value="gemini-3.0-flash" selected>Gemini 3 Flash</option>
+                    </select>
+                </div>
             </div>
         </div>
 
@@ -58,7 +68,7 @@
     <div id="regen-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden flex justify-center items-center z-50">
         <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-2xl flex flex-col h-[60vh]">
             <h2 class="text-lg font-bold mb-2 text-slate-800">Edit Filter System Prompt</h2>
-            <p class="text-xs text-gray-500 mb-3">Changes saved here will apply to this regeneration AND all future messages.</p>
+            <p class="text-xs text-gray-500 mb-3">Changes saved here will apply to this regeneration AND all future messages. The currently selected Filter model will be used.</p>
             
             <textarea id="regen-prompt-input" class="flex-1 w-full border rounded p-3 focus:ring-2 focus:ring-slate-500 outline-none resize-none font-mono text-sm leading-relaxed text-gray-800 shadow-inner"></textarea>
             
@@ -86,7 +96,9 @@
         const sendBtn = document.getElementById('send-btn');
         const chatBox = document.getElementById('chat-box');
         const placeholder = document.getElementById('placeholder');
-        const modelSelect = document.getElementById('model-select');
+        
+        const genModelSelect = document.getElementById('gen-model-select');
+        const filterModelSelect = document.getElementById('filter-model-select');
         
         const modal = document.getElementById('regen-modal');
         const promptInput = document.getElementById('regen-prompt-input');
@@ -112,18 +124,20 @@
 
             if (placeholder) placeholder.style.display = 'none';
 
-            const selectedModel = modelSelect.value;
+            const selectedGenModel = genModelSelect.value;
+            const selectedFilterModel = filterModelSelect.value;
 
             inputField.value = '';
             inputField.disabled = true;
             sendBtn.disabled = true;
-            modelSelect.disabled = true;
+            genModelSelect.disabled = true;
+            filterModelSelect.disabled = true;
 
             // User message (standard text)
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
             // Bot message (will receive markdown formatting)
-            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `Thinking (calling ${selectedModel})...`, 'bg-gray-200 text-gray-900 self-start', true);
+            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `Thinking (Generating: ${selectedGenModel} -> Filtering: ${selectedFilterModel})...`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
@@ -132,7 +146,8 @@
                     body: JSON.stringify({ 
                         user_input: text,
                         filter_prompt: globalFilterPrompt,
-                        model: selectedModel
+                        gen_model: selectedGenModel,
+                        filter_model: selectedFilterModel
                     })
                 });
 
@@ -173,7 +188,8 @@
 
             inputField.disabled = false;
             sendBtn.disabled = false;
-            modelSelect.disabled = false;
+            genModelSelect.disabled = false;
+            filterModelSelect.disabled = false;
             inputField.focus();
         }
 
@@ -253,7 +269,7 @@
 
         confirmRegenBtn.addEventListener('click', async () => {
             const newPrompt = promptInput.value.trim();
-            const selectedModel = modelSelect.value;
+            const selectedFilterModel = filterModelSelect.value;
 
             if (!newPrompt || currentRegenIndex === null) return;
             
@@ -273,7 +289,7 @@
             
             // Reset dataset and apply loading state
             currentRegenBubble.dataset.raw = '';
-            currentRegenBubble.innerHTML = marked.parse(`*Regenerating response with ${selectedModel}...*`);
+            currentRegenBubble.innerHTML = marked.parse(`*Regenerating response with ${selectedFilterModel}...*`);
             
             try {
                 const response = await fetch('/regenerate', {
@@ -282,7 +298,7 @@
                     body: JSON.stringify({ 
                         memory_index: currentRegenIndex,
                         new_filter_prompt: newPrompt,
-                        model: selectedModel
+                        filter_model: selectedFilterModel
                     })
                 });
 
