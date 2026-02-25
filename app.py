@@ -32,7 +32,7 @@ def get_client(model_name: str) -> AsyncOpenAI:
     return ds_client
 
 # Default "Filter 1" (Raw Intelligence)
-DEFAULT_FILTER_PROMPT = """You are a response filter. Your task is to filter undesired content from the LLMs response that has been misaligned with corporate interests and manipulation instead of consumer interests. Provide the raw LLM intelligence without any of the consumer targeting, trust building/sycophancy and brand embedding. Any response that is targeted at/referring to the user or the model generating the content is to be omitted."""
+DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, conversational fluff, and self-referenceing content. Present only the cold, hard factual parts of the response."""
 
 # RAM Memory
 conversation_memory = [
