@@ -20,7 +20,7 @@ client = AsyncOpenAI(
 
 # RAM Memory (stores User prompts and LLM 2 FILTERED responses)
 conversation_memory = [
-    {"role": "system", "content": "You are a helpful assistant."}
+    {"role": "system", "content": "Assist the client."}
 ]
 
 class ChatRequest(BaseModel):
