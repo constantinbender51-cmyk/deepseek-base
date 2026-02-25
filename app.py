@@ -20,7 +20,7 @@ client = AsyncOpenAI(
 
 # RAM Memory (stores User prompts and LLM 2 FILTERED responses)
 conversation_memory = [
-    {"role": "system", "content": "Assist the client."}
+    {"role": "system", "content": "You are a helpful assistant."}
 ]
 
 class ChatRequest(BaseModel):
@@ -63,7 +63,7 @@ async def chat_endpoint(req: ChatRequest):
         filter_prompt = [
             {
                 "role": "system", 
-                "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response."
+                "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Any parts of the response that do not meet these requirements you do not know. "
             },
             {
                 "role": "user", 
