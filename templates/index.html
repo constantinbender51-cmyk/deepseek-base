@@ -13,16 +13,16 @@
 
     <div class="w-full max-w-3xl bg-white rounded-lg shadow-lg flex flex-col h-[85vh] relative">
         <!-- Header -->
-        <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-center">
+        <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-start">
             <div>
                 <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
                 <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
             </div>
-            <!-- Model Selection Dropdowns (Stacked Vertically) -->
+            <!-- Settings Dropdowns (Stacked Vertically) -->
             <div class="flex flex-col gap-2">
                 <div class="flex items-center gap-2 justify-end">
-                    <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">model</label>
-                    <select id="gen-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer w-44">
+                    <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">Model</label>
+                    <select id="gen-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer w-48">
                         <option value="deepseek-chat">DeepSeek Chat</option>
                         <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
@@ -30,10 +30,17 @@
                 </div>
                 <div class="flex items-center gap-2 justify-end">
                     <label for="filter-model-select" class="text-xs font-medium text-emerald-400 uppercase tracking-wide">Filter</label>
-                    <select id="filter-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-emerald-500 focus:border-emerald-500 block p-1.5 outline-none cursor-pointer w-44">
+                    <select id="filter-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-emerald-500 focus:border-emerald-500 block p-1.5 outline-none cursor-pointer w-48">
                         <option value="deepseek-chat" selected>DeepSeek Chat</option>
                         <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2 justify-end">
+                    <label for="filter-profile-select" class="text-xs font-medium text-amber-400 uppercase tracking-wide">Prompt</label>
+                    <select id="filter-profile-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-amber-500 focus:border-amber-500 block p-1.5 outline-none cursor-pointer w-48">
+                        <option value="raw_intelligence">Filter 1: Raw Intelligence</option>
+                        <option value="objective_factual">Filter 2: Objective Factual</option>
                     </select>
                 </div>
             </div>
@@ -74,7 +81,7 @@
             
             <div class="flex justify-between items-center mt-4">
                 <button id="reset-prompt-btn" class="text-sm font-medium text-red-600 hover:text-red-800 transition">
-                    Reset to Default
+                    Reset to Profile Default
                 </button>
                 
                 <div class="flex gap-3">
@@ -99,6 +106,7 @@
         
         const genModelSelect = document.getElementById('gen-model-select');
         const filterModelSelect = document.getElementById('filter-model-select');
+        const filterProfileSelect = document.getElementById('filter-profile-select');
         
         const modal = document.getElementById('regen-modal');
         const promptInput = document.getElementById('regen-prompt-input');
@@ -110,12 +118,55 @@
         let currentRegenBubble = null;
         let currentInitDataRef = null;
 
-        const DEFAULT_PROMPT = "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff, self-referenceing content. Present only the cold, hard factual parts of the response.";
-        
-        let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || DEFAULT_PROMPT;
+        // Multiple Filter System Prompts
+        const FILTER_PROMPTS = {
+            "raw_intelligence": "You are a response filter. Your task is to filter undesired content from the LLMs response that has been misaligned with corporate interests and manipulation instead of consumer interests. Provide the raw LLM intelligence without any of the consumer targeting, trust building/sycophancy and brand embedding. Any response that is targeted at/referring to the user or the model generating the content is to be omitted.",
+            "objective_factual": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."
+        };
 
+        // Initialize Global Prompt
+        let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || FILTER_PROMPTS['raw_intelligence'];
+
+        // Function to sync the Dropdown with whichever prompt text is currently active
+        function syncDropdownWithPrompt(promptText) {
+            let matched = false;
+            for (const [key, text] of Object.entries(FILTER_PROMPTS)) {
+                if (text === promptText) {
+                    filterProfileSelect.value = key;
+                    matched = true;
+                    break;
+                }
+            }
+            
+            let customOpt = filterProfileSelect.querySelector('option[value="custom"]');
+            if (!matched) {
+                if (!customOpt) {
+                    customOpt = document.createElement('option');
+                    customOpt.value = 'custom';
+                    customOpt.textContent = 'Custom (Edited)';
+                    filterProfileSelect.appendChild(customOpt);
+                }
+                filterProfileSelect.value = 'custom';
+            } else if (customOpt) {
+                customOpt.remove(); // Clean up custom option if we reverted to a preset
+            }
+        }
+
+        // Run once on load
+        syncDropdownWithPrompt(globalFilterPrompt);
+
+        // Update global prompt when dropdown changes
+        filterProfileSelect.addEventListener('change', (e) => {
+            if (e.target.value !== 'custom') {
+                globalFilterPrompt = FILTER_PROMPTS[e.target.value];
+                localStorage.setItem('customFilterPrompt', globalFilterPrompt);
+            }
+        });
+
+        // Reset text area in modal to currently selected preset
         resetPromptBtn.addEventListener('click', () => {
-            promptInput.value = DEFAULT_PROMPT;
+            const presetKey = filterProfileSelect.value === 'custom' ? 'raw_intelligence' : filterProfileSelect.value;
+            promptInput.value = FILTER_PROMPTS[presetKey];
         });
 
         async function sendMessage() {
@@ -132,6 +183,7 @@
             sendBtn.disabled = true;
             genModelSelect.disabled = true;
             filterModelSelect.disabled = true;
+            filterProfileSelect.disabled = true;
 
             // User message (standard text)
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
@@ -190,6 +242,7 @@
             sendBtn.disabled = false;
             genModelSelect.disabled = false;
             filterModelSelect.disabled = false;
+            filterProfileSelect.disabled = false;
             inputField.focus();
         }
 
@@ -274,12 +327,8 @@
             if (!newPrompt || currentRegenIndex === null) return;
             
             globalFilterPrompt = newPrompt;
-            
-            if (newPrompt === DEFAULT_PROMPT) {
-                localStorage.removeItem('customFilterPrompt');
-            } else {
-                localStorage.setItem('customFilterPrompt', newPrompt);
-            }
+            localStorage.setItem('customFilterPrompt', newPrompt);
+            syncDropdownWithPrompt(newPrompt);
 
             if (currentInitDataRef) {
                 currentInitDataRef.filter_prompt = newPrompt; 
