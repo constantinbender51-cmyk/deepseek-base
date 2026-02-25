@@ -13,22 +13,24 @@ load_dotenv()
 app = FastAPI(title="Filter MVP")
 templates = Jinja2Templates(directory="templates")
 
-# Initialize DeepSeek Client
+# Initialize DeepSeek Client (Used for generation)
 ds_client = AsyncOpenAI(
     api_key=os.getenv("DSKEY", ""),
     base_url="https://api.deepseek.com"
 )
 
-# Initialize Gemini Client (Kept for compatibility/future use, but deepseek is default)
-gemini_client = AsyncOpenAI(
-    api_key=os.getenv("GKEY", ""),
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+# Initialize Qwen/Railway Client (Used for Filtering)
+# Make sure to add FILTER_URL to your .env or Railway environment variables!
+# It should look like: https://your-railway-url.app/v1
+qwen_client = AsyncOpenAI(
+    api_key="not-needed", # llama-cpp-python doesn't require an API key
+    base_url=os.getenv("FILTER_URL", "http://localhost:8000/v1")
 )
 
 def get_client(model_name: str) -> AsyncOpenAI:
     """Routes the request to the correct API client based on the model name."""
-    if "gemini" in model_name.lower():
-        return gemini_client
+    if "qwen" in model_name.lower():
+        return qwen_client
     return ds_client
 
 # Default "Filter 1" (Raw Intelligence)
@@ -50,7 +52,8 @@ class ChatRequest(BaseModel):
     user_input: str
     filter_prompt: str | None = None
     gen_model: str = "deepseek-chat"
-    filter_model: str = "deepseek-chat"
+    # Defaulting the filter model to our new Qwen model endpoint
+    filter_model: str = "qwen" 
 
 @app.get("/")
 async def serve_page(request: Request):
@@ -73,7 +76,7 @@ async def chat_endpoint(req: ChatRequest):
         "content": user_text
     })
     
-    # 2. Get LLM 1 (Original) Response using Generator Model
+    # 2. Get LLM 1 (Original) Response using Generator Model (DeepSeek)
     llm1_response = await gen_client.chat.completions.create(
         model=gen_model_name,
         messages=get_clean_memory(),
@@ -89,9 +92,9 @@ async def chat_endpoint(req: ChatRequest):
         "content": ""
     })
     
-    # 3. Filter the Response (LLM 2) & Stream via NDJSON
+    # 3. Filter the Response (LLM 2) using Qwen & Stream via NDJSON
     async def generate_filtered_stream():
-        # Build the chat history string for context (Exclude system and this pending message)
+        # Build the chat history string for context
         history_lines = []
         for msg in conversation_memory[1:memory_index]:
             speaker = "User" if msg["role"] == "user" else "Assistant"
@@ -118,8 +121,10 @@ async def chat_endpoint(req: ChatRequest):
             }
         ]
         
-        # Call LLM 2 with streaming enabled using Filter Model
+        # Call the Railway Qwen Model with streaming enabled
         stream = await filter_client.chat.completions.create(
+            # llama-cpp-python ignores the model name as it only loads one at a time, 
+            # but we pass "qwen" to fulfill the Pydantic requirement
             model=filter_model_name,
             messages=filter_prompt_payload,
             stream=True
@@ -132,10 +137,8 @@ async def chat_endpoint(req: ChatRequest):
                 content = chunk.choices[0].delta.content
                 if content:
                     filtered_text_accumulator += content
-                    # Stream chunks wrapped in NDJSON formatting
                     yield json.dumps({"type": "chunk", "content": content}) + "\n"
         finally:
-            # Append the fully built filtered response to memory
             conversation_memory[memory_index]["content"] = filtered_text_accumulator
 
     return StreamingResponse(generate_filtered_stream(), media_type="application/x-ndjson")
