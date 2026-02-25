@@ -60,7 +60,7 @@ async def chat_endpoint(req: ChatRequest):
             },
             {
                 "role": "user", 
-                "content": f"Original User Prompt: {user_text}\n\nResponse to filter: {original_text}"
+                "content": f"Filter this text: {original_text}"
             }
         ]
         
