@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Filter MVP - Debugger</title>
-    <!-- 1. Added ?plugins=typography to Tailwind to style markdown elements -->
+    <!-- Tailwind with Typography plugin -->
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <!-- 2. Added Marked.js for parsing Markdown -->
+    <!-- Marked.js for parsing Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col justify-center items-center p-4">
@@ -67,12 +67,68 @@
     </div>
 
     <script>
-        // Configure Marked.js to format linebreaks properly like standard chat interfaces
+        // Custom Marked.js Renderer to inject a wrapper and a Copy button around code blocks
+        const escapeHtml = (str) => {
+            return str.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#39;');
+        };
+
+        const renderer = {
+            code(code, infostring, escaped) {
+                const lang = (infostring || '').match(/\S*/)[0];
+                const langClass = lang ? `language-${lang}` : '';
+                const safeCode = escaped ? code : escapeHtml(code);
+                
+                // Wrapping the code block in a relative div with 'not-prose' so we can apply our own styles safely
+                return `
+                    <div class="relative group my-4 not-prose">
+                        <button class="copy-code-btn absolute top-2 right-2 bg-slate-700 text-slate-300 hover:text-white hover:bg-slate-600 px-2.5 py-1 rounded text-xs transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 shadow z-10" aria-label="Copy code">Copy</button>
+                        <pre class="bg-slate-800 text-slate-100 p-4 rounded-lg overflow-x-auto text-sm font-mono leading-normal"><code class="${langClass}">${safeCode}</code></pre>
+                    </div>
+                `;
+            }
+        };
+
+        marked.use({ renderer });
         marked.setOptions({
             breaks: true,
             gfm: true
         });
 
+        // Global Event Listener for dynamically generated Copy Buttons
+        document.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('copy-code-btn')) {
+                const btn = e.target;
+                const wrapper = btn.closest('.relative');
+                const codeBlock = wrapper.querySelector('code');
+                
+                if (codeBlock) {
+                    try {
+                        // textContent retrieves the unescaped text exactly as intended
+                        await navigator.clipboard.writeText(codeBlock.textContent);
+                        
+                        // Visual feedback
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('bg-emerald-600', 'text-white');
+                        btn.classList.remove('bg-slate-700', 'text-slate-300');
+                        
+                        setTimeout(() => {
+                            btn.textContent = 'Copy';
+                            btn.classList.remove('bg-emerald-600', 'text-white');
+                            btn.classList.add('bg-slate-700', 'text-slate-300');
+                        }, 2000);
+                    } catch (err) {
+                        console.error('Failed to copy code: ', err);
+                        btn.textContent = 'Error';
+                    }
+                }
+            }
+        });
+
+        // Chat UI Logic
         const inputField = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         const chatBox = document.getElementById('chat-box');
@@ -106,10 +162,8 @@
             inputField.disabled = true;
             sendBtn.disabled = true;
 
-            // User message (standard text)
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
-            // Bot message (will receive markdown formatting)
             const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', 'Thinking (calling LLM 1)...', 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
@@ -122,7 +176,6 @@
                     })
                 });
 
-                // Clear standard text and prep for Markdown accumulation
                 botMessageDiv.innerHTML = ''; 
                 botMessageDiv.dataset.raw = '';
 
@@ -145,7 +198,6 @@
                         if (data.type === 'init') {
                             addDebugControls(data, botMessageDiv, botWrapper);
                         } else if (data.type === 'chunk') {
-                            // 3. Accumulate raw text and re-parse to HTML
                             botMessageDiv.dataset.raw += data.content;
                             botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
                             chatBox.scrollTop = chatBox.scrollHeight;
@@ -162,7 +214,6 @@
             inputField.focus();
         }
 
-        // 4. Added isMarkdown parameter and Tailwind Typography classes ('prose')
         function appendMessage(sender, text, classes, isMarkdown = false) {
             const wrapper = document.createElement('div');
             wrapper.className = `flex flex-col max-w-[85%] ${sender === 'User' ? 'ml-auto items-end' : 'mr-auto items-start'}`;
@@ -172,9 +223,8 @@
             label.textContent = sender;
             
             const bubble = document.createElement('div');
-            // Apply Tailwind Typography 'prose' only if it's a markdown-enabled bubble
             const formatClasses = isMarkdown ? 'prose prose-slate prose-sm max-w-none' : 'whitespace-pre-wrap';
-            bubble.className = `p-3 rounded-lg shadow-sm ${formatClasses} ${classes}`;
+            bubble.className = `p-3 rounded-lg shadow-sm w-full ${formatClasses} ${classes}`;
             
             if (isMarkdown) {
                 bubble.dataset.raw = text;
@@ -209,7 +259,6 @@
             wrapper.appendChild(controlsDiv);
 
             const originalDiv = document.createElement('div');
-            // 5. Apply typography to the original output block as well
             originalDiv.className = 'mt-2 p-3 bg-yellow-50 text-yellow-900 border border-yellow-200 rounded text-sm hidden w-full prose prose-yellow prose-sm max-w-none';
             originalDiv.innerHTML = `<strong class="block mb-2 text-xs uppercase text-yellow-700 not-prose">Unfiltered Original Output:</strong>${marked.parse(initData.original_text)}`;
             wrapper.appendChild(originalDiv);
@@ -256,7 +305,6 @@
 
             modal.classList.add('hidden');
             
-            // Reset dataset and apply loading state
             currentRegenBubble.dataset.raw = '';
             currentRegenBubble.innerHTML = marked.parse('*Regenerating response based on updated rules...*');
             
@@ -288,7 +336,6 @@
                         if (!line.trim()) continue;
                         const data = JSON.parse(line);
                         if (data.type === 'chunk') {
-                            // 6. Accumulate and re-parse during regeneration
                             currentRegenBubble.dataset.raw += data.content;
                             currentRegenBubble.innerHTML = marked.parse(currentRegenBubble.dataset.raw);
                             chatBox.scrollTop = chatBox.scrollHeight;
