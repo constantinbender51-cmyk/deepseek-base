@@ -67,8 +67,8 @@
     </div>
 
     <script>
-        // Custom Marked.js Renderer to inject a wrapper and a Copy button around code blocks
         const escapeHtml = (str) => {
+            if (!str) return '';
             return str.replace(/&/g, '&amp;')
                       .replace(/</g, '&lt;')
                       .replace(/>/g, '&gt;')
@@ -76,13 +76,18 @@
                       .replace(/'/g, '&#39;');
         };
 
+        // Updated for modern Marked.js v12+ which passes a single Token object
         const renderer = {
-            code(code, infostring, escaped) {
-                const lang = (infostring || '').match(/\S*/)[0];
+            code(token) {
+                // Fallback for older marked versions just in case
+                const codeText = typeof token === 'object' ? token.text : token;
+                let lang = (typeof token === 'object' ? token.lang : arguments[1]) || '';
+                const isEscaped = typeof token === 'object' ? token.escaped : arguments[2];
+
+                lang = (lang.match(/\S*/) || [''])[0]; // Extract just the language name
                 const langClass = lang ? `language-${lang}` : '';
-                const safeCode = escaped ? code : escapeHtml(code);
+                const safeCode = isEscaped ? codeText : escapeHtml(codeText);
                 
-                // Wrapping the code block in a relative div with 'not-prose' so we can apply our own styles safely
                 return `
                     <div class="relative group my-4 not-prose">
                         <button class="copy-code-btn absolute top-2 right-2 bg-slate-700 text-slate-300 hover:text-white hover:bg-slate-600 px-2.5 py-1 rounded text-xs transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 shadow z-10" aria-label="Copy code">Copy</button>
@@ -107,7 +112,6 @@
                 
                 if (codeBlock) {
                     try {
-                        // textContent retrieves the unescaped text exactly as intended
                         await navigator.clipboard.writeText(codeBlock.textContent);
                         
                         // Visual feedback
@@ -128,7 +132,6 @@
             }
         });
 
-        // Chat UI Logic
         const inputField = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         const chatBox = document.getElementById('chat-box');
@@ -205,7 +208,7 @@
                     }
                 }
             } catch (error) {
-                botMessageDiv.textContent = 'Error connecting to server.';
+                botMessageDiv.innerHTML = '<span class="text-red-600 font-semibold">Error connecting to server or parsing response.</span>';
                 console.error(error);
             }
 
@@ -343,7 +346,7 @@
                     }
                 }
             } catch (error) {
-                currentRegenBubble.textContent = 'Error during regeneration.';
+                currentRegenBubble.innerHTML = '<span class="text-red-600 font-semibold">Error during regeneration.</span>';
                 console.error(error);
             }
         });
