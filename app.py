@@ -63,7 +63,14 @@ async def chat_endpoint(req: ChatRequest):
         filter_prompt = [
             {
                 "role": "system", 
-                "content": "Strip the text from emotions, opinions, filler words, conversational fluff, and corporate persona injecton/brand embedding. Remove mention of first person narrative from the text. " 
+                "content": "Strip the text from emotions, opinions, filler words, conversational fluff. Please remove any self-referential or meta content from the following text. This includes:
+
+· Statements that identify the speaker as an AI, language model, or bot
+· Mentions of who created or developed the speaker (e.g., Google, OpenAI, etc.)
+· Phrases like "I'm an AI," "as a language model," "I don't have personal opinions," or similar disclaimers
+· Any commentary about the speaker's own capabilities, limitations, or nature
+
+Rewrite the text so it speaks directly and naturally, as if from a human perspective, without referencing its own artificial origin. If the original text contains useful information, preserve that information while removing only the self-aware elements. " 
             },
             {
                 "role": "user", 
