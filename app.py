@@ -19,7 +19,7 @@ client = AsyncOpenAI(
     base_url="https://api.deepseek.com"
 )
 
-DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff, self-referenceing content. Present only the cold, hard factual parts of the response."""
+DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."""
 
 # RAM Memory (stores User prompts and LLM 2 FILTERED responses, plus debug metadata)
 conversation_memory = [
