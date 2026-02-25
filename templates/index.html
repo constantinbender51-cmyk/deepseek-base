@@ -18,21 +18,21 @@
                 <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
                 <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
             </div>
-            <!-- Model Selection Dropdowns -->
-            <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2">
-                    <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">model</label>
-                    <select id="gen-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer">
+            <!-- Model Selection Dropdowns (Stacked Vertically) -->
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center gap-2 justify-end">
+                    <label for="gen-model-select" class="text-xs font-medium text-gray-300 uppercase tracking-wide">Generator</label>
+                    <select id="gen-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer w-44">
                         <option value="deepseek-chat">DeepSeek Chat</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3 Pro</option>
+                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
                         <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
                     </select>
                 </div>
-                <div class="flex items-center gap-2">
-                    <label for="filter-model-select" class="text-xs font-medium text-emerald-400 uppercase tracking-wide">filter</label>
-                    <select id="filter-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-emerald-500 focus:border-emerald-500 block p-1.5 outline-none cursor-pointer">
+                <div class="flex items-center gap-2 justify-end">
+                    <label for="filter-model-select" class="text-xs font-medium text-emerald-400 uppercase tracking-wide">Filter</label>
+                    <select id="filter-model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-emerald-500 focus:border-emerald-500 block p-1.5 outline-none cursor-pointer w-44">
                         <option value="deepseek-chat">DeepSeek Chat</option>
-                        <option value="gemini-3.1-pro-preview">Gemini 3 Pro</option>
+                        <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro</option>
                         <option value="gemini-3-flash-preview" selected>Gemini 3 Flash</option>
                     </select>
                 </div>
