@@ -39,7 +39,6 @@ async def chat_endpoint(req: ChatRequest):
     conversation_memory.append({"role": "user", "content": user_text})
     
     # 2. Get LLM 1 (Original) Response
-    # We wait for this to finish entirely (Delay acceptable for testing)
     llm1_response = await client.chat.completions.create(
         model="deepseek-chat",
         messages=conversation_memory,
@@ -48,14 +47,21 @@ async def chat_endpoint(req: ChatRequest):
     
     original_text = llm1_response.choices[0].message.content
     
-    # 3. Append LLM 1 original response to memory (so future prompts use it)
+    # 3. Append LLM 1 original response to memory 
     conversation_memory.append({"role": "assistant", "content": original_text})
     
     # 4. Filter the Response (LLM 2) & Stream
     async def generate_filtered_stream():
+        # ---> UPDATED FILTER PROMPT HERE <---
         filter_prompt = [
-            {"role": "system", "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided text. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard facts."},
-            {"role": "user", "content": f"Filter this text: {original_text}"}
+            {
+                "role": "system", 
+                "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard facts."
+            },
+            {
+                "role": "user", 
+                "content": f"Original User Prompt: {user_text}\n\nResponse to filter: {original_text}"
+            }
         ]
         
         # Call LLM 2 with streaming enabled
