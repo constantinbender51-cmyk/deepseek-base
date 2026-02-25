@@ -1,219 +1,327 @@
-import os
-import json
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-from openai import AsyncOpenAI
-from dotenv import load_dotenv
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Filter MVP - Debugger</title>
+    <!-- Added ?plugins=typography to Tailwind to style markdown elements -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <!-- Added Marked.js for parsing Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col justify-center items-center p-4">
 
-# Load environment variables
-load_dotenv()
+    <div class="w-full max-w-3xl bg-white rounded-lg shadow-lg flex flex-col h-[85vh] relative">
+        <!-- Header -->
+        <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold">Project "Filter" (Debug Mode)</h1>
+                <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
+            </div>
+            <!-- Model Selection Dropdown -->
+            <div class="flex items-center gap-2">
+                <label for="model-select" class="text-sm font-medium text-gray-300">Model:</label>
+                <select id="model-select" class="bg-slate-700 text-white border border-slate-600 text-sm rounded focus:ring-slate-500 focus:border-slate-500 block p-1.5 outline-none cursor-pointer">
+                    <option value="deepseek-chat">DeepSeek Chat</option>
+                    <option value="gemini-3.0-pro">Gemini 3 Pro</option>
+                    <option value="gemini-3.0-flash">Gemini 3 Flash</option>
+                </select>
+            </div>
+        </div>
 
-app = FastAPI(title="Filter MVP")
-templates = Jinja2Templates(directory="templates")
+        <!-- Chat Response Field -->
+        <div id="chat-box" class="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50 pb-6">
+            <div class="text-gray-400 text-center italic mt-10" id="placeholder">
+                Waiting for input...
+            </div>
+        </div>
 
-# Initialize DeepSeek Client
-ds_client = AsyncOpenAI(
-    api_key=os.getenv("DSKEY", ""),
-    base_url="https://api.deepseek.com"
-)
+        <!-- Text Input & Send Button -->
+        <div class="p-4 bg-white border-t rounded-b-lg flex gap-2">
+            <input 
+                type="text" 
+                id="user-input" 
+                class="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-slate-500"
+                placeholder="Type your prompt here..."
+                autocomplete="off"
+            >
+            <button 
+                id="send-btn" 
+                class="bg-slate-800 text-white px-6 py-2 rounded-lg font-semibold hover:bg-slate-700 transition disabled:bg-slate-400"
+            >
+                Send
+            </button>
+        </div>
+    </div>
 
-# Initialize Gemini Client
-# Gemini cleanly supports the OpenAI SDK wrapper via Google's compatibility endpoint 
-gemini_client = AsyncOpenAI(
-    api_key=os.getenv("GKEY", ""),
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
+    <!-- Edit Filter Prompt Modal -->
+    <div id="regen-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-11/12 max-w-2xl flex flex-col h-[60vh]">
+            <h2 class="text-lg font-bold mb-2 text-slate-800">Edit Filter System Prompt</h2>
+            <p class="text-xs text-gray-500 mb-3">Changes saved here will apply to this regeneration AND all future messages.</p>
+            
+            <textarea id="regen-prompt-input" class="flex-1 w-full border rounded p-3 focus:ring-2 focus:ring-slate-500 outline-none resize-none font-mono text-sm leading-relaxed text-gray-800 shadow-inner"></textarea>
+            
+            <div class="flex justify-between items-center mt-4">
+                <button id="reset-prompt-btn" class="text-sm font-medium text-red-600 hover:text-red-800 transition">
+                    Reset to Default
+                </button>
+                
+                <div class="flex gap-3">
+                    <button id="close-modal-btn" class="px-5 py-2 font-medium bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">Cancel</button>
+                    <button id="confirm-regen-btn" class="px-5 py-2 font-medium bg-slate-800 text-white rounded hover:bg-slate-700 transition shadow">Save & Regenerate</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-def get_client(model_name: str) -> AsyncOpenAI:
-    """Routes the request to the correct API client based on the model name."""
-    if "gemini" in model_name.lower():
-        return gemini_client
-    return ds_client
+    <script>
+        // Configure Marked.js to format linebreaks properly like standard chat interfaces
+        marked.setOptions({
+            breaks: true,
+            gfm: true
+        });
 
-DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."""
+        const inputField = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const chatBox = document.getElementById('chat-box');
+        const placeholder = document.getElementById('placeholder');
+        const modelSelect = document.getElementById('model-select');
+        
+        const modal = document.getElementById('regen-modal');
+        const promptInput = document.getElementById('regen-prompt-input');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const confirmRegenBtn = document.getElementById('confirm-regen-btn');
+        const resetPromptBtn = document.getElementById('reset-prompt-btn');
 
-# RAM Memory (stores User prompts and LLM 2 FILTERED responses, plus debug metadata)
-conversation_memory = [
-    {
-        "role": "system", 
-        "content": "You are a helpful assistant.",
-        "original_content": None,
-        "filter_prompt": None
-    }
-]
+        let currentRegenIndex = null;
+        let currentRegenBubble = null;
+        let currentInitDataRef = null;
 
-def get_clean_memory():
-    """Strips debug metadata before passing to the base LLM context."""
-    return [{"role": m["role"], "content": m["content"]} for m in conversation_memory]
+        const DEFAULT_PROMPT = "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff, self-referenceing content. Present only the cold, hard factual parts of the response.";
+        
+        let globalFilterPrompt = localStorage.getItem('customFilterPrompt') || DEFAULT_PROMPT;
 
-class ChatRequest(BaseModel):
-    user_input: str
-    filter_prompt: str | None = None
-    model: str = "deepseek-chat"
+        resetPromptBtn.addEventListener('click', () => {
+            promptInput.value = DEFAULT_PROMPT;
+        });
 
-class RegenerateRequest(BaseModel):
-    memory_index: int
-    new_filter_prompt: str
-    model: str = "deepseek-chat"
+        async function sendMessage() {
+            const text = inputField.value.trim();
+            if (!text) return;
 
-@app.get("/")
-async def serve_page(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+            if (placeholder) placeholder.style.display = 'none';
 
-@app.post("/chat")
-async def chat_endpoint(req: ChatRequest):
-    user_text = req.user_input
-    filter_prompt_text = req.filter_prompt or DEFAULT_FILTER_PROMPT
-    model_name = req.model
-    active_client = get_client(model_name)
-    
-    # 1. Append User Input to memory
-    conversation_memory.append({
-        "role": "user", 
-        "content": user_text,
-        "original_content": None,
-        "filter_prompt": None
-    })
-    
-    # 2. Get LLM 1 (Original) Response
-    llm1_response = await active_client.chat.completions.create(
-        model=model_name,
-        messages=get_clean_memory(),
-        stream=False
-    )
-    
-    original_text = llm1_response.choices[0].message.content
-    
-    # Pre-allocate assistant message in memory
-    memory_index = len(conversation_memory)
-    conversation_memory.append({
-        "role": "assistant",
-        "content": "",
-        "original_content": original_text,
-        "filter_prompt": filter_prompt_text
-    })
-    
-    # 3. Filter the Response (LLM 2) & Stream via NDJSON
-    async def generate_filtered_stream():
-        # First yield the initialization packet containing the unfiltered original
-        init_data = {
-            "type": "init",
-            "memory_index": memory_index,
-            "original_text": original_text,
-            "filter_prompt": filter_prompt_text
+            const selectedModel = modelSelect.value;
+
+            inputField.value = '';
+            inputField.disabled = true;
+            sendBtn.disabled = true;
+            modelSelect.disabled = true;
+
+            // User message (standard text)
+            appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
+            
+            // Bot message (will receive markdown formatting)
+            const { bubble: botMessageDiv, wrapper: botWrapper } = appendMessage('Filter', `Thinking (calling ${selectedModel})...`, 'bg-gray-200 text-gray-900 self-start', true);
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        user_input: text,
+                        filter_prompt: globalFilterPrompt,
+                        model: selectedModel
+                    })
+                });
+
+                // Clear standard text and prep for Markdown accumulation
+                botMessageDiv.innerHTML = ''; 
+                botMessageDiv.dataset.raw = '';
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); 
+                    
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        const data = JSON.parse(line);
+
+                        if (data.type === 'init') {
+                            addDebugControls(data, botMessageDiv, botWrapper);
+                        } else if (data.type === 'chunk') {
+                            // Accumulate raw text and re-parse to HTML
+                            botMessageDiv.dataset.raw += data.content;
+                            botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    }
+                }
+            } catch (error) {
+                botMessageDiv.textContent = 'Error connecting to server.';
+                console.error(error);
+            }
+
+            inputField.disabled = false;
+            sendBtn.disabled = false;
+            modelSelect.disabled = false;
+            inputField.focus();
         }
-        yield json.dumps(init_data) + "\n"
-        
-        # Build the chat history string for context (Exclude system and this pending message)
-        history_lines = []
-        for msg in conversation_memory[1:memory_index]:
-            speaker = "User" if msg["role"] == "user" else "Assistant"
-            history_lines.append(f"{speaker}: {msg['content']}")
-        
-        formatted_history = "\n\n".join(history_lines)
 
-        filter_prompt_payload = [
-            {
-                "role": "system", 
-                "content": filter_prompt_text
-            },
-            {
-                "role": "user", 
-                "content": (
-                    f"CONTEXT (Full Chat History):\n"
-                    f"{formatted_history}\n\n"
-                    f"==================\n\n"
-                    f"UNFILTERED RESPONSE TO THE LATEST PROMPT:\n"
-                    f"{original_text}\n\n"
-                    f"TASK:\n"
-                    f"Using the context above if needed, apply your filtering rules to the UNFILTERED RESPONSE. Output ONLY the filtered text."
-                )
+        function appendMessage(sender, text, classes, isMarkdown = false) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex flex-col max-w-[85%] ${sender === 'User' ? 'ml-auto items-end' : 'mr-auto items-start'}`;
+            
+            const label = document.createElement('span');
+            label.className = 'text-xs text-gray-500 mb-1';
+            label.textContent = sender;
+            
+            const bubble = document.createElement('div');
+            // Apply Tailwind Typography 'prose' only if it's a markdown-enabled bubble
+            const formatClasses = isMarkdown ? 'prose prose-slate prose-sm max-w-none' : 'whitespace-pre-wrap';
+            bubble.className = `p-3 rounded-lg shadow-sm ${formatClasses} ${classes}`;
+            
+            if (isMarkdown) {
+                bubble.dataset.raw = text;
+                bubble.innerHTML = marked.parse(text);
+            } else {
+                bubble.textContent = text;
             }
-        ]
-        
-        # Call LLM 2 with streaming enabled
-        stream = await active_client.chat.completions.create(
-            model=model_name,
-            messages=filter_prompt_payload,
-            stream=True
-        )
-        
-        filtered_text_accumulator = ""
-        
-        try:
-            async for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    filtered_text_accumulator += content
-                    # Stream chunks wrapped in NDJSON formatting
-                    yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        finally:
-            # Append the fully built filtered response to memory
-            conversation_memory[memory_index]["content"] = filtered_text_accumulator
+            
+            wrapper.appendChild(label);
+            wrapper.appendChild(bubble);
+            chatBox.appendChild(wrapper);
+            
+            chatBox.scrollTop = chatBox.scrollHeight;
 
-    return StreamingResponse(generate_filtered_stream(), media_type="application/x-ndjson")
+            return { bubble, wrapper };
+        }
 
-@app.post("/regenerate")
-async def regenerate_endpoint(req: RegenerateRequest):
-    idx = req.memory_index
-    if idx >= len(conversation_memory) or conversation_memory[idx]["role"] != "assistant":
-        async def err_stream():
-            yield json.dumps({"type": "chunk", "content": "[Error: Memory index invalid.]"}) + "\n"
-        return StreamingResponse(err_stream(), media_type="application/x-ndjson")
+        function addDebugControls(initData, bubble, wrapper) {
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'flex gap-3 mt-1 px-1';
+            
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'text-xs font-semibold text-blue-500 hover:text-blue-700 transition';
+            toggleBtn.textContent = '[ Show Original ]';
+            
+            const regenBtn = document.createElement('button');
+            regenBtn.className = 'text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition';
+            regenBtn.textContent = '[ Edit Prompt & Regenerate ]';
+            
+            controlsDiv.appendChild(toggleBtn);
+            controlsDiv.appendChild(regenBtn);
+            wrapper.appendChild(controlsDiv);
 
-    original_text = conversation_memory[idx]["original_content"]
-    new_prompt = req.new_filter_prompt
-    model_name = req.model
-    active_client = get_client(model_name)
-    
-    # Update stored prompt and reset current content
-    conversation_memory[idx]["filter_prompt"] = new_prompt
-    conversation_memory[idx]["content"] = ""
+            const originalDiv = document.createElement('div');
+            originalDiv.className = 'mt-2 p-3 bg-yellow-50 text-yellow-900 border border-yellow-200 rounded text-sm hidden w-full prose prose-yellow prose-sm max-w-none';
+            originalDiv.innerHTML = `<strong class="block mb-2 text-xs uppercase text-yellow-700 not-prose">Unfiltered Original Output:</strong>${marked.parse(initData.original_text)}`;
+            wrapper.appendChild(originalDiv);
 
-    async def regenerate_stream():
-        # Build historic context dynamically right up to this specific index
-        history_lines = []
-        for msg in conversation_memory[1:idx]:
-            speaker = "User" if msg["role"] == "user" else "Assistant"
-            history_lines.append(f"{speaker}: {msg['content']}")
-        
-        formatted_history = "\n\n".join(history_lines)
+            toggleBtn.addEventListener('click', () => {
+                if (originalDiv.classList.contains('hidden')) {
+                    originalDiv.classList.remove('hidden');
+                    toggleBtn.textContent = '[ Hide Original ]';
+                } else {
+                    originalDiv.classList.add('hidden');
+                    toggleBtn.textContent = '[ Show Original ]';
+                }
+            });
 
-        filter_prompt_payload = [
-            {
-                "role": "system", 
-                "content": new_prompt
-            },
-            {
-                "role": "user", 
-                "content": (
-                    f"CONTEXT (Full Chat History):\n"
-                    f"{formatted_history}\n\n"
-                    f"==================\n\n"
-                    f"UNFILTERED RESPONSE TO THE LATEST PROMPT:\n"
-                    f"{original_text}\n\n"
-                    f"TASK:\n"
-                    f"Using the context above if needed, apply your filtering rules to the UNFILTERED RESPONSE. Output ONLY the filtered text."
-                )
+            regenBtn.addEventListener('click', () => {
+                currentRegenIndex = initData.memory_index;
+                currentRegenBubble = bubble;
+                currentInitDataRef = initData; 
+                
+                promptInput.value = initData.filter_prompt;
+                modal.classList.remove('hidden');
+            });
+        }
+
+        closeModalBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        confirmRegenBtn.addEventListener('click', async () => {
+            const newPrompt = promptInput.value.trim();
+            const selectedModel = modelSelect.value;
+
+            if (!newPrompt || currentRegenIndex === null) return;
+            
+            globalFilterPrompt = newPrompt;
+            
+            if (newPrompt === DEFAULT_PROMPT) {
+                localStorage.removeItem('customFilterPrompt');
+            } else {
+                localStorage.setItem('customFilterPrompt', newPrompt);
             }
-        ]
-        
-        stream = await active_client.chat.completions.create(
-            model=model_name,
-            messages=filter_prompt_payload,
-            stream=True
-        )
-        
-        filtered_text_accumulator = ""
-        try:
-            async for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    filtered_text_accumulator += content
-                    yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        finally:
-            conversation_memory[idx]["content"] = filtered_text_accumulator
 
-    return StreamingResponse(regenerate_stream(), media_type="application/x-ndjson")
+            if (currentInitDataRef) {
+                currentInitDataRef.filter_prompt = newPrompt; 
+            }
+
+            modal.classList.add('hidden');
+            
+            // Reset dataset and apply loading state
+            currentRegenBubble.dataset.raw = '';
+            currentRegenBubble.innerHTML = marked.parse(`*Regenerating response with ${selectedModel}...*`);
+            
+            try {
+                const response = await fetch('/regenerate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        memory_index: currentRegenIndex,
+                        new_filter_prompt: newPrompt,
+                        model: selectedModel
+                    })
+                });
+
+                currentRegenBubble.innerHTML = '';
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop(); 
+                    
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        const data = JSON.parse(line);
+                        if (data.type === 'chunk') {
+                            currentRegenBubble.dataset.raw += data.content;
+                            currentRegenBubble.innerHTML = marked.parse(currentRegenBubble.dataset.raw);
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    }
+                }
+            } catch (error) {
+                currentRegenBubble.textContent = 'Error during regeneration.';
+                console.error(error);
+            }
+        });
+
+        sendBtn.addEventListener('click', sendMessage);
+        inputField.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
