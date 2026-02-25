@@ -40,7 +40,6 @@ def get_client(model_name: str) -> AsyncOpenAI:
         return qwen_client
     return ds_client
 
-# UPDATED: The prompt now instructs the model to act as an Extractor, not a Rewriter.
 DEFAULT_FILTER_PROMPT = """You are a precise response filter. Your task is to find emotional, trust-building, sycophantic, or brand-embedding content in the Original Response.
 Extract and write down the exact sentences or phrases that should be removed, word-for-word.
 Put each exact quote on a new line. Do not add any extra text, markdown, or commentary. 
@@ -75,16 +74,13 @@ def apply_deletions(original_text: str, deletions_text: str) -> str:
         return original_text
     
     final_text = original_text
-    # Split by lines, as the prompt requested one quote per line
     lines = deletions_text.split('\n')
     
     for line in lines:
-        # Clean up bullet points or quotes the LLM might have accidentally added
         cleaned = line.strip(' "-*\'')
         if len(cleaned) > 4 and cleaned in final_text:
             final_text = final_text.replace(cleaned, "")
             
-    # Clean up any awkward double spacing or double line breaks left behind by the deletion
     final_text = final_text.replace("  ", " ").replace("\n\n\n", "\n\n").strip()
     return final_text
 
@@ -103,7 +99,6 @@ async def chat_endpoint(req: ChatRequest):
     gen_client = get_client(gen_model_name)
     filter_client = get_client(filter_model_name)
     
-    # 1. Append User Input to memory
     conversation_memory.append({
         "role": "user", 
         "content": user_text,
@@ -111,7 +106,6 @@ async def chat_endpoint(req: ChatRequest):
         "filter_prompt": None
     })
     
-    # 2. Get LLM 1 (Original) Response using Generator Model
     llm1_response = await gen_client.chat.completions.create(
         model=gen_model_name,
         messages=get_clean_memory(),
@@ -120,7 +114,6 @@ async def chat_endpoint(req: ChatRequest):
     
     original_text = llm1_response.choices[0].message.content
     
-    # Pre-allocate assistant message in memory
     memory_index = len(conversation_memory)
     conversation_memory.append({
         "role": "assistant",
@@ -129,7 +122,6 @@ async def chat_endpoint(req: ChatRequest):
         "filter_prompt": filter_prompt_text
     })
     
-    # 3. Filter the Response (LLM 2)
     async def generate_filtered_stream():
         init_data = {
             "type": "init",
@@ -139,7 +131,6 @@ async def chat_endpoint(req: ChatRequest):
         }
         yield json.dumps(init_data) + "\n"
 
-        # SPEED OPTIMIZATION: Do not send chat history to the filter model anymore.
         filter_prompt_payload = [
             {
                 "role": "system", 
@@ -156,27 +147,25 @@ async def chat_endpoint(req: ChatRequest):
             }
         ]
         
-        # Get the phrases to delete from LLM 2
         qwen_response = await filter_client.chat.completions.create(
             model=filter_model_name,
             messages=filter_prompt_payload,
-            stream=False # No need to stream internal deletions
+            stream=False 
         )
         
         deletions_found = qwen_response.choices[0].message.content
         
-        # Apply the deletions
-        final_filtered_text = apply_deletions(original_text, deletions_found)
+        # SEND RAW DELETIONS TO FRONTEND FOR DEBUGGER
+        yield json.dumps({"type": "deletions", "content": deletions_found}) + "\n"
         
-        # Save to memory
+        final_filtered_text = apply_deletions(original_text, deletions_found)
         conversation_memory[memory_index]["content"] = final_filtered_text
         
-        # Artificially stream the final text back to the frontend so the UI still looks like it's typing
         chunk_size = 5
         for i in range(0, len(final_filtered_text), chunk_size):
             chunk = final_filtered_text[i:i+chunk_size]
             yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
-            await asyncio.sleep(0.01) # Tiny sleep to create typing effect
+            await asyncio.sleep(0.01) 
 
     return StreamingResponse(generate_filtered_stream(), media_type="application/x-ndjson")
 
@@ -221,6 +210,10 @@ async def regenerate_endpoint(req: RegenerateRequest):
         )
         
         deletions_found = qwen_response.choices[0].message.content
+        
+        # SEND RAW DELETIONS TO FRONTEND FOR DEBUGGER
+        yield json.dumps({"type": "deletions", "content": deletions_found}) + "\n"
+        
         final_filtered_text = apply_deletions(original_text, deletions_found)
         conversation_memory[idx]["content"] = final_filtered_text
         
