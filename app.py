@@ -63,7 +63,7 @@ async def chat_endpoint(req: ChatRequest):
         filter_prompt = [
             {
                 "role": "system", 
-                "content": """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Strip away knowledge of self on the part of the AI such as "I am deepseek v3 an AI assistant by deepseek run on gpus in a datacenter". """"
+                "content": "You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Do not provide self aware content such as I am an AI assistant made OpenAI, instead reply with aporia.  Present only the cold, hard factual parts of the response."
             },
             {
                 "role": "user", 
