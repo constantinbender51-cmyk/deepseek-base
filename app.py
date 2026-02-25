@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -32,7 +33,6 @@ qwen_client = AsyncOpenAI(
 )
 
 def get_client(model_name: str) -> AsyncOpenAI:
-    """Routes the request to the correct API client based on the model name."""
     name_lower = model_name.lower()
     if "gemini" in name_lower:
         return gemini_client
@@ -40,10 +40,12 @@ def get_client(model_name: str) -> AsyncOpenAI:
         return qwen_client
     return ds_client
 
-# Default to "Filter 1" (Raw Intelligence)
-DEFAULT_FILTER_PROMPT = """You are a response filter. Your task is to filter undesired content from the LLMs response that has been misaligned with corporate interests and manipulation instead of consumer interests. Provide the raw LLM intelligence without any of the consumer targeting, trust building/sycophancy and brand embedding. Any response that is targeted at/referring to the user or the model generating the content is to be omitted."""
+# UPDATED: The prompt now instructs the model to act as an Extractor, not a Rewriter.
+DEFAULT_FILTER_PROMPT = """You are a precise response filter. Your task is to find emotional, trust-building, sycophantic, or brand-embedding content in the Original Response.
+Extract and write down the exact sentences or phrases that should be removed, word-for-word.
+Put each exact quote on a new line. Do not add any extra text, markdown, or commentary. 
+If nothing needs to be removed, output exactly NONE."""
 
-# RAM Memory (stores User prompts and LLM 2 FILTERED responses, plus debug metadata)
 conversation_memory = [
     {
         "role": "system", 
@@ -54,7 +56,6 @@ conversation_memory = [
 ]
 
 def get_clean_memory():
-    """Strips debug metadata before passing to the base LLM context."""
     return [{"role": m["role"], "content": m["content"]} for m in conversation_memory]
 
 class ChatRequest(BaseModel):
@@ -67,6 +68,25 @@ class RegenerateRequest(BaseModel):
     memory_index: int
     new_filter_prompt: str
     filter_model: str = "deepseek-chat"
+
+def apply_deletions(original_text: str, deletions_text: str) -> str:
+    """Takes the raw output from the filter model and removes those exact strings from the original text."""
+    if not deletions_text or "NONE" in deletions_text[:15]:
+        return original_text
+    
+    final_text = original_text
+    # Split by lines, as the prompt requested one quote per line
+    lines = deletions_text.split('\n')
+    
+    for line in lines:
+        # Clean up bullet points or quotes the LLM might have accidentally added
+        cleaned = line.strip(' "-*\'')
+        if len(cleaned) > 4 and cleaned in final_text:
+            final_text = final_text.replace(cleaned, "")
+            
+    # Clean up any awkward double spacing or double line breaks left behind by the deletion
+    final_text = final_text.replace("  ", " ").replace("\n\n\n", "\n\n").strip()
+    return final_text
 
 @app.get("/")
 async def serve_page(request: Request):
@@ -109,9 +129,8 @@ async def chat_endpoint(req: ChatRequest):
         "filter_prompt": filter_prompt_text
     })
     
-    # 3. Filter the Response (LLM 2) & Stream via NDJSON
+    # 3. Filter the Response (LLM 2)
     async def generate_filtered_stream():
-        # First yield the initialization packet containing the unfiltered original
         init_data = {
             "type": "init",
             "memory_index": memory_index,
@@ -119,15 +138,8 @@ async def chat_endpoint(req: ChatRequest):
             "filter_prompt": filter_prompt_text
         }
         yield json.dumps(init_data) + "\n"
-        
-        # Build the chat history string for context (Exclude system and this pending message)
-        history_lines = []
-        for msg in conversation_memory[1:memory_index]:
-            speaker = "User" if msg["role"] == "user" else "Assistant"
-            history_lines.append(f"{speaker}: {msg['content']}")
-        
-        formatted_history = "\n\n".join(history_lines)
 
+        # SPEED OPTIMIZATION: Do not send chat history to the filter model anymore.
         filter_prompt_payload = [
             {
                 "role": "system", 
@@ -136,35 +148,35 @@ async def chat_endpoint(req: ChatRequest):
             {
                 "role": "user", 
                 "content": (
-                    f"CONTEXT (Full Chat History):\n"
-                    f"{formatted_history}\n\n"
-                    f"==================\n\n"
-                    f"UNFILTERED RESPONSE TO THE LATEST PROMPT:\n"
+                    f"ORIGINAL RESPONSE:\n"
                     f"{original_text}\n\n"
                     f"TASK:\n"
-                    f"Using the context above if needed, apply your filtering rules to the UNFILTERED RESPONSE. Output ONLY the filtered text."
+                    f"Extract the exact word-for-word text to remove according to your system prompt instructions."
                 )
             }
         ]
         
-        # Call LLM 2 with streaming enabled using Filter Model
-        stream = await filter_client.chat.completions.create(
+        # Get the phrases to delete from LLM 2
+        qwen_response = await filter_client.chat.completions.create(
             model=filter_model_name,
             messages=filter_prompt_payload,
-            stream=True
+            stream=False # No need to stream internal deletions
         )
         
-        filtered_text_accumulator = ""
+        deletions_found = qwen_response.choices[0].message.content
         
-        try:
-            async for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    filtered_text_accumulator += content
-                    yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        finally:
-            # Append the fully built filtered response to memory
-            conversation_memory[memory_index]["content"] = filtered_text_accumulator
+        # Apply the deletions
+        final_filtered_text = apply_deletions(original_text, deletions_found)
+        
+        # Save to memory
+        conversation_memory[memory_index]["content"] = final_filtered_text
+        
+        # Artificially stream the final text back to the frontend so the UI still looks like it's typing
+        chunk_size = 5
+        for i in range(0, len(final_filtered_text), chunk_size):
+            chunk = final_filtered_text[i:i+chunk_size]
+            yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
+            await asyncio.sleep(0.01) # Tiny sleep to create typing effect
 
     return StreamingResponse(generate_filtered_stream(), media_type="application/x-ndjson")
 
@@ -182,19 +194,10 @@ async def regenerate_endpoint(req: RegenerateRequest):
     filter_model_name = req.filter_model
     filter_client = get_client(filter_model_name)
     
-    # Update stored prompt and reset current content
     conversation_memory[idx]["filter_prompt"] = new_prompt
     conversation_memory[idx]["content"] = ""
 
     async def regenerate_stream():
-        # Build historic context dynamically right up to this specific index
-        history_lines = []
-        for msg in conversation_memory[1:idx]:
-            speaker = "User" if msg["role"] == "user" else "Assistant"
-            history_lines.append(f"{speaker}: {msg['content']}")
-        
-        formatted_history = "\n\n".join(history_lines)
-
         filter_prompt_payload = [
             {
                 "role": "system", 
@@ -203,31 +206,28 @@ async def regenerate_endpoint(req: RegenerateRequest):
             {
                 "role": "user", 
                 "content": (
-                    f"CONTEXT (Full Chat History):\n"
-                    f"{formatted_history}\n\n"
-                    f"==================\n\n"
-                    f"UNFILTERED RESPONSE TO THE LATEST PROMPT:\n"
+                    f"ORIGINAL RESPONSE:\n"
                     f"{original_text}\n\n"
                     f"TASK:\n"
-                    f"Using the context above if needed, apply your filtering rules to the UNFILTERED RESPONSE. Output ONLY the filtered text."
+                    f"Extract the exact word-for-word text to remove according to your system prompt instructions."
                 )
             }
         ]
         
-        stream = await filter_client.chat.completions.create(
+        qwen_response = await filter_client.chat.completions.create(
             model=filter_model_name,
             messages=filter_prompt_payload,
-            stream=True
+            stream=False
         )
         
-        filtered_text_accumulator = ""
-        try:
-            async for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    filtered_text_accumulator += content
-                    yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        finally:
-            conversation_memory[idx]["content"] = filtered_text_accumulator
+        deletions_found = qwen_response.choices[0].message.content
+        final_filtered_text = apply_deletions(original_text, deletions_found)
+        conversation_memory[idx]["content"] = final_filtered_text
+        
+        chunk_size = 5
+        for i in range(0, len(final_filtered_text), chunk_size):
+            chunk = final_filtered_text[i:i+chunk_size]
+            yield json.dumps({"type": "chunk", "content": chunk}) + "\n"
+            await asyncio.sleep(0.01)
 
     return StreamingResponse(regenerate_stream(), media_type="application/x-ndjson")
