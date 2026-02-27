@@ -37,7 +37,7 @@
                 <option value="unfiltered">Unfiltered</option>
                 <option value="system_instruction" selected>System Instruction</option>
                 <option value="revision">Revision</option>
-                <option value="representative">Representative</option>
+                <option value="intermediary">Intermediary</option>
                 <option value="cumulative">Cumulative</option>
             </select>
             
@@ -63,6 +63,19 @@
             breaks: true,
             gfm: true
         });
+
+        // Safe replace helper: Replaces text but avoids matching inside HTML tags
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function safeReplaceAll(text, search, replacement) {
+            if (!search) return text;
+            let escapedSearch = escapeRegExp(search);
+            // Negative lookahead to ensure we aren't matching text inside <...>
+            let regex = new RegExp(escapedSearch + '(?![^<]*>)', 'g');
+            return text.replace(regex, replacement);
+        }
 
         const inputField = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
@@ -129,6 +142,7 @@
                 const decoder = new TextDecoder("utf-8");
                 let buffer = "";
                 let revisionBuffer = "";
+                let finalizedRaw = "";
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -150,6 +164,7 @@
                         
                         } else if (data.type === 'transition') {
                             // Signal visual transition to Phase 2 (Revision)
+                            finalizedRaw = botMessageDiv.dataset.raw;
                             const badge = document.createElement('div');
                             badge.id = 'revision-badge';
                             badge.className = 'text-xs text-orange-600 mt-2 font-semibold italic';
@@ -161,22 +176,29 @@
                             // Phase 2: Stream flawed strings & replace in real-time
                             revisionBuffer += data.content;
                             let revLines = revisionBuffer.split('\n');
-                            let needsRender = false;
 
                             while (revLines.length > 1) {
                                 let phrase = revLines.shift().trim();
                                 if (phrase) {
-                                    // Highlight the exact verbatim string
+                                    // Highlight completed phrases definitively
                                     let replacement = `<span style="color: #b91c1c; background-color: #fee2e2; padding: 0 4px; border-radius: 4px; font-weight: bold;">${phrase}</span>`;
-                                    botMessageDiv.dataset.raw = botMessageDiv.dataset.raw.split(phrase).join(replacement);
-                                    needsRender = true;
+                                    finalizedRaw = safeReplaceAll(finalizedRaw, phrase, replacement);
                                 }
                             }
                             revisionBuffer = revLines[0]; // Retain incomplete chunk
                             
-                            if (needsRender) {
-                                botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
+                            // Immediately parse and replace the active string chunk for real-time red streaming
+                            let activeRaw = finalizedRaw;
+                            let activePhrase = revisionBuffer.trim();
+                            
+                            // Require at least 3 chars to start highlighting to prevent jumping the gun on common tiny characters
+                            if (activePhrase.length >= 3) {
+                                let replacement = `<span style="color: #b91c1c; background-color: #fee2e2; padding: 0 4px; border-radius: 4px; font-weight: bold;">${activePhrase}</span>`;
+                                activeRaw = safeReplaceAll(activeRaw, activePhrase, replacement);
                             }
+                            
+                            botMessageDiv.innerHTML = marked.parse(activeRaw);
+                            botMessageDiv.dataset.raw = finalizedRaw;
                         }
                     }
                 }
@@ -185,8 +207,9 @@
                 if (revisionBuffer.trim()) {
                     let phrase = revisionBuffer.trim();
                     let replacement = `<span style="color: #b91c1c; background-color: #fee2e2; padding: 0 4px; border-radius: 4px; font-weight: bold;">${phrase}</span>`;
-                    botMessageDiv.dataset.raw = botMessageDiv.dataset.raw.split(phrase).join(replacement);
-                    botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
+                    finalizedRaw = safeReplaceAll(finalizedRaw, phrase, replacement);
+                    botMessageDiv.dataset.raw = finalizedRaw;
+                    botMessageDiv.innerHTML = marked.parse(finalizedRaw);
                 }
 
                 const badge = messageWrapper.querySelector('#revision-badge');
