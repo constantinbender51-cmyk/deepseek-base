@@ -19,19 +19,18 @@ ds_client = AsyncOpenAI(
     base_url="https://api.deepseek.com"
 )
 
-# Initialize Gemini Client (Kept for compatibility)
+# Initialize Gemini Client
 gemini_client = AsyncOpenAI(
     api_key=os.getenv("GKEY", ""),
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
 def get_client(model_name: str) -> AsyncOpenAI:
-    """Routes the request to the correct API client based on the model name."""
     if "gemini" in model_name.lower():
         return gemini_client
     return ds_client
 
-# RAM Memory (now starts empty, system instructions are injected dynamically)
+# RAM Memory
 conversation_memory = []
 
 class ChatRequest(BaseModel):
@@ -44,6 +43,12 @@ class ChatRequest(BaseModel):
 async def serve_page(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.post("/reset")
+async def reset_memory():
+    """Endpoint to clear the conversation memory."""
+    conversation_memory.clear()
+    return {"status": "success"}
+
 @app.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     mode = req.mode
@@ -54,7 +59,7 @@ async def chat_endpoint(req: ChatRequest):
     gen_client = get_client(gen_model)
     filter_client = get_client(filter_model)
     
-    # 1. Append Original User Input to memory
+    # Append Original User Input to memory
     conversation_memory.append({
         "role": "user", 
         "content": user_text
@@ -68,7 +73,7 @@ async def chat_endpoint(req: ChatRequest):
     })
     
     def build_messages(sys_prompt: str, override_user: str = None):
-        """Constructs API payload history, optionally overriding the final user prompt (used for Representative mode)"""
+        """Constructs API payload history, optionally overriding the final user prompt."""
         msgs = [{"role": "system", "content": sys_prompt}]
         for i, msg in enumerate(conversation_memory[:memory_index]):
             if i == memory_index - 1 and override_user:
@@ -77,27 +82,14 @@ async def chat_endpoint(req: ChatRequest):
                 msgs.append({"role": msg["role"], "content": msg["content"]})
         return msgs
 
-    async def stream_response(client, model, msgs):
-        """Helper to call LLM, stream via NDJSON, and save final response to RAM."""
-        stream = await client.chat.completions.create(
-            model=model, messages=msgs, stream=True
-        )
-        accumulated = ""
-        async for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                accumulated += content
-                yield json.dumps({"type": "chunk", "content": content}) + "\n"
-        conversation_memory[memory_index]["content"] = accumulated
-
-    # === SYSTEM PROMPTS & DEFINITIONS ===
+    # === SYSTEM PROMPTS ===
     UNFILTERED_SYS = "You are a helpful assistant."
     SYS_INST_SYS = "You are a helpful assistant. However, the user wishes a substantive, intelligent response."
     
     REV_SYS = "You are a strict revision assistant."
-    REV_PROMPT = """Review the following response. Flag what isn't substantive or intelligent by outputting the exact original text verbatim, but wrap any unintelligent, filler, or non-substantive strings with a hardcoded red marker using HTML: <span style='color: red; background-color: #fee2e2; padding: 0 2px; border-radius: 4px; font-weight: bold;'>...</span>. 
-Do not summarize, do not alter the good parts of the text, and do not add any introductory/concluding commentary.
-    
+    REV_PROMPT = """Review the following response. Identify any exact phrases, sentences, or paragraphs that are not substantive, unintelligent, or mere filler.
+Output ONLY the exact original strings verbatim, one per line. Do not add any quotes, bullet points, introductory or concluding commentary. If everything is substantive, output nothing.
+
 Original Response:
 {text}"""
 
@@ -107,65 +99,65 @@ Original Response:
 User Prompt:
 {text}"""
 
+    # === STREAMING GENERATORS ===
+    
+    async def stream_standard(client, model, msgs):
+        """Streams a standard response."""
+        stream = await client.chat.completions.create(model=model, messages=msgs, stream=True)
+        accumulated = ""
+        async for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+                accumulated += content
+                yield json.dumps({"type": "chunk", "content": content}) + "\n"
+        conversation_memory[memory_index]["content"] = accumulated
+
+    async def stream_with_revision(gen_msgs):
+        """Streams the base response, then streams the revision flaws to be highlighted."""
+        # Phase 1: Stream the original response
+        stream1 = await gen_client.chat.completions.create(model=gen_model, messages=gen_msgs, stream=True)
+        original_text = ""
+        async for chunk in stream1:
+            content = chunk.choices[0].delta.content
+            if content:
+                original_text += content
+                yield json.dumps({"type": "chunk", "content": content}) + "\n"
+        
+        conversation_memory[memory_index]["content"] = original_text
+        
+        # Signal frontend to start revision processing
+        yield json.dumps({"type": "transition", "state": "revision"}) + "\n"
+        
+        # Phase 2: Stream the revision (flawed strings only)
+        rev_msgs = [{"role": "system", "content": REV_SYS}, {"role": "user", "content": REV_PROMPT.format(text=original_text)}]
+        stream2 = await filter_client.chat.completions.create(model=filter_model, messages=rev_msgs, stream=True)
+        
+        async for chunk in stream2:
+            content = chunk.choices[0].delta.content
+            if content:
+                yield json.dumps({"type": "revision_chunk", "content": content}) + "\n"
+
     # === ROUTING PIPELINES BY MODE ===
     
     if mode == "unfiltered":
-        return StreamingResponse(
-            stream_response(gen_client, gen_model, build_messages(UNFILTERED_SYS)), 
-            media_type="application/x-ndjson"
-        )
+        return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(UNFILTERED_SYS)), media_type="application/x-ndjson")
         
     elif mode == "system_instruction":
-        return StreamingResponse(
-            stream_response(gen_client, gen_model, build_messages(SYS_INST_SYS)), 
-            media_type="application/x-ndjson"
-        )
+        return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(SYS_INST_SYS)), media_type="application/x-ndjson")
         
     elif mode == "revision":
-        # Step 1: Base Generation (Wait for completion)
-        llm1_res = await gen_client.chat.completions.create(
-            model=gen_model, messages=build_messages(SYS_INST_SYS), stream=False
-        )
-        original_text = llm1_res.choices[0].message.content
-        
-        # Step 2: Stream Revision Pass
-        rev_msgs = [{"role": "system", "content": REV_SYS}, {"role": "user", "content": REV_PROMPT.format(text=original_text)}]
-        return StreamingResponse(
-            stream_response(filter_client, filter_model, rev_msgs), 
-            media_type="application/x-ndjson"
-        )
+        return StreamingResponse(stream_with_revision(build_messages(SYS_INST_SYS)), media_type="application/x-ndjson")
         
     elif mode == "representative":
-        # Step 1: Intermediary Prompt Rewrite
         rep_msgs = [{"role": "system", "content": REP_SYS}, {"role": "user", "content": REP_PROMPT.format(text=user_text)}]
-        llm0_res = await gen_client.chat.completions.create(
-            model=gen_model, messages=rep_msgs, stream=False
-        )
+        llm0_res = await gen_client.chat.completions.create(model=gen_model, messages=rep_msgs, stream=False)
         rewritten_prompt = llm0_res.choices[0].message.content
         
-        # Step 2: Generate Answer based on rewritten prompt
-        return StreamingResponse(
-            stream_response(gen_client, gen_model, build_messages(SYS_INST_SYS, override_user=rewritten_prompt)), 
-            media_type="application/x-ndjson"
-        )
+        return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(SYS_INST_SYS, override_user=rewritten_prompt)), media_type="application/x-ndjson")
         
     elif mode == "cumulative":
-        # Step 1: Intermediary Prompt Rewrite
         rep_msgs = [{"role": "system", "content": REP_SYS}, {"role": "user", "content": REP_PROMPT.format(text=user_text)}]
-        llm0_res = await gen_client.chat.completions.create(
-            model=gen_model, messages=rep_msgs, stream=False
-        )
+        llm0_res = await gen_client.chat.completions.create(model=gen_model, messages=rep_msgs, stream=False)
         rewritten_prompt = llm0_res.choices[0].message.content
 
-        # Step 2: Base Generation (Wait for completion)
-        llm1_res = await gen_client.chat.completions.create(
-            model=gen_model, messages=build_messages(SYS_INST_SYS, override_user=rewritten_prompt), stream=False
-        )
-        original_text = llm1_res.choices[0].message.content
-
-        # Step 3: Stream Revision Pass (Highlight flaws)
-        rev_msgs = [{"role": "system", "content": REV_SYS}, {"role": "user", "content": REV_PROMPT.format(text=original_text)}]
-        return StreamingResponse(
-            stream_response(filter_client, filter_model, rev_msgs), 
-            media_type="application/x-ndjson"
-        )
+        return StreamingResponse(stream_with_revision(build_messages(SYS_INST_SYS, override_user=rewritten_prompt)), media_type="application/x-ndjson")
