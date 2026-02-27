@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Filter MVP</title>
-    <!-- Added ?plugins=typography to Tailwind to style markdown elements -->
+    <!-- Tailwind to style markdown elements -->
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <!-- Added Marked.js for parsing Markdown -->
+    <!-- Marked.js for parsing Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col justify-center items-center p-4">
@@ -16,7 +16,7 @@
         <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-start">
             <div>
                 <h1 class="text-xl font-bold">Project "Filter"</h1>
-                <p class="text-sm text-gray-300">Unemotional, factual responses only.</p>
+                <p class="text-sm text-gray-300">Substantive, intelligent, and refined responses.</p>
             </div>
         </div>
 
@@ -27,8 +27,16 @@
             </div>
         </div>
 
-        <!-- Text Input & Send Button -->
-        <div class="p-4 bg-white border-t rounded-b-lg flex gap-2">
+        <!-- Controls: Mode Dropdown, Text Input & Send Button -->
+        <div class="p-4 bg-white border-t rounded-b-lg flex flex-col sm:flex-row gap-2">
+            <select id="mode-select" class="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500 bg-gray-50 text-slate-700 font-semibold cursor-pointer">
+                <option value="unfiltered">Unfiltered</option>
+                <option value="system_instruction" selected>System Instruction</option>
+                <option value="revision">Revision</option>
+                <option value="representative">Representative</option>
+                <option value="cumulative">Cumulative</option>
+            </select>
+            
             <input 
                 type="text" 
                 id="user-input" 
@@ -46,7 +54,7 @@
     </div>
 
     <script>
-        // Configure Marked.js to format linebreaks properly like standard chat interfaces
+        // Configure Marked.js to format linebreaks properly and allow inline styles 
         marked.setOptions({
             breaks: true,
             gfm: true
@@ -56,33 +64,36 @@
         const sendBtn = document.getElementById('send-btn');
         const chatBox = document.getElementById('chat-box');
         const placeholder = document.getElementById('placeholder');
+        const modeSelect = document.getElementById('mode-select');
 
         async function sendMessage() {
             const text = inputField.value.trim();
+            const mode = modeSelect.value;
+            
             if (!text) return;
-
             if (placeholder) placeholder.style.display = 'none';
 
             inputField.value = '';
             inputField.disabled = true;
             sendBtn.disabled = true;
+            modeSelect.disabled = true;
 
-            // User message (standard text)
+            // User message
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
-            // Bot message (will receive markdown formatting)
-            const { bubble: botMessageDiv } = appendMessage('Filter', `Thinking...`, 'bg-gray-200 text-gray-900 self-start', true);
+            // Bot message (pre-allocate)
+            const { bubble: botMessageDiv } = appendMessage('Filter AI', `Thinking...`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        user_input: text 
-                    }) // gen_model, filter_model, and prompt fallback to default backend configurations
+                        user_input: text,
+                        mode: mode
+                    }) 
                 });
 
-                // Clear standard text and prep for Markdown accumulation
                 botMessageDiv.innerHTML = ''; 
                 botMessageDiv.dataset.raw = '';
 
@@ -103,8 +114,8 @@
                         const data = JSON.parse(line);
 
                         if (data.type === 'chunk') {
-                            // Accumulate raw text and re-parse to HTML
                             botMessageDiv.dataset.raw += data.content;
+                            // Parse standard formatting while preserving safe HTML markers assigned by Revision logic
                             botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
                             chatBox.scrollTop = chatBox.scrollHeight;
                         }
@@ -117,6 +128,7 @@
 
             inputField.disabled = false;
             sendBtn.disabled = false;
+            modeSelect.disabled = false;
             inputField.focus();
         }
 
@@ -129,7 +141,6 @@
             label.textContent = sender;
             
             const bubble = document.createElement('div');
-            // Apply Tailwind Typography 'prose' only if it's a markdown-enabled bubble
             const formatClasses = isMarkdown ? 'prose prose-slate prose-sm max-w-none' : 'whitespace-pre-wrap';
             bubble.className = `p-3 rounded-lg shadow-sm ${formatClasses} ${classes}`;
             
