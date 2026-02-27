@@ -140,22 +140,27 @@ User Prompt:
     # === ROUTING PIPELINES BY MODE ===
     
     if mode == "unfiltered":
+        # Base generation ONLY
         return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(UNFILTERED_SYS)), media_type="application/x-ndjson")
         
     elif mode == "system_instruction":
+        # System instructions mechanism ONLY
         return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(SYS_INST_SYS)), media_type="application/x-ndjson")
         
     elif mode == "revision":
-        return StreamingResponse(stream_with_revision(build_messages(SYS_INST_SYS)), media_type="application/x-ndjson")
+        # Revision mechanism ONLY (Uses unfiltered gen as its base)
+        return StreamingResponse(stream_with_revision(build_messages(UNFILTERED_SYS)), media_type="application/x-ndjson")
         
-    elif mode == "representative":
+    elif mode == "intermediary":
+        # Intermediary reprompting mechanism ONLY (Uses unfiltered gen as its base)
         rep_msgs = [{"role": "system", "content": REP_SYS}, {"role": "user", "content": REP_PROMPT.format(text=user_text)}]
         llm0_res = await gen_client.chat.completions.create(model=gen_model, messages=rep_msgs, stream=False)
         rewritten_prompt = llm0_res.choices[0].message.content
         
-        return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(SYS_INST_SYS, override_user=rewritten_prompt)), media_type="application/x-ndjson")
+        return StreamingResponse(stream_standard(gen_client, gen_model, build_messages(UNFILTERED_SYS, override_user=rewritten_prompt)), media_type="application/x-ndjson")
         
     elif mode == "cumulative":
+        # ALL MECHANISMS (Reprompt + System Instructions + Revision)
         rep_msgs = [{"role": "system", "content": REP_SYS}, {"role": "user", "content": REP_PROMPT.format(text=user_text)}]
         llm0_res = await gen_client.chat.completions.create(model=gen_model, messages=rep_msgs, stream=False)
         rewritten_prompt = llm0_res.choices[0].message.content
