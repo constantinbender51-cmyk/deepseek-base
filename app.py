@@ -45,7 +45,7 @@ async def serve_page(request: Request):
 
 @app.post("/reset")
 async def reset_memory():
-    """Endpoint to clear the conversation memory."""
+    """Endpoint to clear the conversation memory for a New Chat."""
     conversation_memory.clear()
     return {"status": "success"}
 
