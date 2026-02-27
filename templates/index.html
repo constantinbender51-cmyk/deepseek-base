@@ -18,9 +18,9 @@
                 <h1 class="text-xl font-bold">Project "Filter"</h1>
                 <p class="text-sm text-gray-300">Substantive, intelligent, and refined responses.</p>
             </div>
-            <!-- Memory Reset Button -->
-            <button id="reset-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-semibold transition">
-                Reset Memory
+            <!-- New Chat Button -->
+            <button id="new-chat-btn" class="bg-slate-600 hover:bg-slate-500 border border-slate-500 text-white px-4 py-2 rounded text-sm font-semibold transition shadow-sm">
+                + New Chat
             </button>
         </div>
 
@@ -66,19 +66,29 @@
 
         const inputField = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
-        const resetBtn = document.getElementById('reset-btn');
+        const newChatBtn = document.getElementById('new-chat-btn');
         const chatBox = document.getElementById('chat-box');
-        const placeholder = document.getElementById('placeholder');
         const modeSelect = document.getElementById('mode-select');
 
-        // Handle Memory Reset
-        resetBtn.addEventListener('click', async () => {
+        // Handle New Chat (Reset Interface & Memory)
+        newChatBtn.addEventListener('click', async () => {
             try {
+                // 1. Wipe backend memory
                 await fetch('/reset', { method: 'POST' });
-                chatBox.innerHTML = '';
-                appendMessage('System', 'Memory wiped clean.', 'bg-gray-800 text-white self-center text-sm', false);
+                
+                // 2. Wipe frontend chat elements and restore placeholder
+                chatBox.innerHTML = `
+                    <div class="text-gray-400 text-center italic mt-10" id="placeholder">
+                        Waiting for input...
+                    </div>
+                `;
+                
+                // 3. Clear text input and focus
+                inputField.value = '';
+                inputField.focus();
+
             } catch (err) {
-                console.error("Failed to reset memory", err);
+                console.error("Failed to start new chat", err);
             }
         });
 
@@ -87,7 +97,12 @@
             const mode = modeSelect.value;
             
             if (!text) return;
-            if (placeholder) placeholder.style.display = 'none';
+
+            // Hide placeholder dynamically if it exists
+            const currentPlaceholder = document.getElementById('placeholder');
+            if (currentPlaceholder) {
+                currentPlaceholder.style.display = 'none';
+            }
 
             inputField.value = '';
             inputField.disabled = true;
