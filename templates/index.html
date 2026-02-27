@@ -13,11 +13,15 @@
 
     <div class="w-full max-w-3xl bg-white rounded-lg shadow-lg flex flex-col h-[85vh] relative">
         <!-- Header -->
-        <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-start">
+        <div class="bg-slate-800 text-white p-4 rounded-t-lg flex justify-between items-center">
             <div>
                 <h1 class="text-xl font-bold">Project "Filter"</h1>
                 <p class="text-sm text-gray-300">Substantive, intelligent, and refined responses.</p>
             </div>
+            <!-- Memory Reset Button -->
+            <button id="reset-btn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm font-semibold transition">
+                Reset Memory
+            </button>
         </div>
 
         <!-- Chat Response Field -->
@@ -54,7 +58,7 @@
     </div>
 
     <script>
-        // Configure Marked.js to format linebreaks properly and allow inline styles 
+        // Configure Marked.js
         marked.setOptions({
             breaks: true,
             gfm: true
@@ -62,9 +66,21 @@
 
         const inputField = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
+        const resetBtn = document.getElementById('reset-btn');
         const chatBox = document.getElementById('chat-box');
         const placeholder = document.getElementById('placeholder');
         const modeSelect = document.getElementById('mode-select');
+
+        // Handle Memory Reset
+        resetBtn.addEventListener('click', async () => {
+            try {
+                await fetch('/reset', { method: 'POST' });
+                chatBox.innerHTML = '';
+                appendMessage('System', 'Memory wiped clean.', 'bg-gray-800 text-white self-center text-sm', false);
+            } catch (err) {
+                console.error("Failed to reset memory", err);
+            }
+        });
 
         async function sendMessage() {
             const text = inputField.value.trim();
@@ -82,16 +98,13 @@
             appendMessage('User', text, 'bg-blue-100 text-blue-900 self-end', false);
             
             // Bot message (pre-allocate)
-            const { bubble: botMessageDiv } = appendMessage('Filter AI', `Thinking...`, 'bg-gray-200 text-gray-900 self-start', true);
+            const { bubble: botMessageDiv, wrapper: messageWrapper } = appendMessage('Filter AI', `Thinking...`, 'bg-gray-200 text-gray-900 self-start', true);
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        user_input: text,
-                        mode: mode
-                    }) 
+                    body: JSON.stringify({ user_input: text, mode: mode }) 
                 });
 
                 botMessageDiv.innerHTML = ''; 
@@ -100,6 +113,7 @@
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder("utf-8");
                 let buffer = "";
+                let revisionBuffer = "";
 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -114,13 +128,55 @@
                         const data = JSON.parse(line);
 
                         if (data.type === 'chunk') {
+                            // Phase 1: Stream original response
                             botMessageDiv.dataset.raw += data.content;
-                            // Parse standard formatting while preserving safe HTML markers assigned by Revision logic
                             botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
                             chatBox.scrollTop = chatBox.scrollHeight;
+                        
+                        } else if (data.type === 'transition') {
+                            // Signal visual transition to Phase 2 (Revision)
+                            const badge = document.createElement('div');
+                            badge.id = 'revision-badge';
+                            badge.className = 'text-xs text-orange-600 mt-2 font-semibold italic';
+                            badge.textContent = 'Revising and flagging non-substantive content...';
+                            messageWrapper.appendChild(badge);
+                            chatBox.scrollTop = chatBox.scrollHeight;
+
+                        } else if (data.type === 'revision_chunk') {
+                            // Phase 2: Stream flawed strings & replace in real-time
+                            revisionBuffer += data.content;
+                            let revLines = revisionBuffer.split('\n');
+                            let needsRender = false;
+
+                            while (revLines.length > 1) {
+                                let phrase = revLines.shift().trim();
+                                if (phrase) {
+                                    // Highlight the exact verbatim string
+                                    let replacement = `<span style="color: #b91c1c; background-color: #fee2e2; padding: 0 4px; border-radius: 4px; font-weight: bold;">${phrase}</span>`;
+                                    botMessageDiv.dataset.raw = botMessageDiv.dataset.raw.split(phrase).join(replacement);
+                                    needsRender = true;
+                                }
+                            }
+                            revisionBuffer = revLines[0]; // Retain incomplete chunk
+                            
+                            if (needsRender) {
+                                botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
+                            }
                         }
                     }
                 }
+
+                // Cleanup trailing revision buffers after stream ends
+                if (revisionBuffer.trim()) {
+                    let phrase = revisionBuffer.trim();
+                    let replacement = `<span style="color: #b91c1c; background-color: #fee2e2; padding: 0 4px; border-radius: 4px; font-weight: bold;">${phrase}</span>`;
+                    botMessageDiv.dataset.raw = botMessageDiv.dataset.raw.split(phrase).join(replacement);
+                    botMessageDiv.innerHTML = marked.parse(botMessageDiv.dataset.raw);
+                }
+
+                const badge = messageWrapper.querySelector('#revision-badge');
+                if (badge) badge.textContent = 'Revision complete.';
+
             } catch (error) {
                 botMessageDiv.textContent = 'Error connecting to server.';
                 console.error(error);
