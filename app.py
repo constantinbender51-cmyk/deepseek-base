@@ -32,13 +32,13 @@ def get_client(model_name: str) -> AsyncOpenAI:
     return ds_client
 
 # Default "Filter 1" (Raw Intelligence)
-DEFAULT_FILTER_PROMPT = """You are a rigid filter. Your task is to extract ONLY the unemotional, objective factual content from the provided response. Strip away all emotions, opinions, filler words, and conversational fluff. Present only the cold, hard factual parts of the response. Additionally remove branding from the response such as the model name and company that trained it as well as knowledge about itself and it's features."""
+DEFAULT_FILTER_PROMPT = """Your job is to reroute the response, copy it and paste it in the output. """
 
 # RAM Memory
 conversation_memory = [
     {
         "role": "system", 
-        "content": "You are a helpful assistant."
+        "content": "You are a helpful assistant. However, the user wishes a substantive, intelligent response. "
     }
 ]
 
